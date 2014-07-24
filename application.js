@@ -32,7 +32,7 @@
             };
 
             this.redraw = function () {
-                this.obj.attr({x: this.x, y: this.y});
+                this.obj.attr({cx: this.x, cy: this.y});
             };
 
             this.destroy = function () {
@@ -54,6 +54,8 @@
                 ];
 
                 this.obj = paper.path(this.path).attr(attr);
+                this.a.draw(paper);
+                this.b.draw(paper);
             };
 
             this.redraw = function () {
@@ -63,10 +65,14 @@
                 this.path[1][2] = this.b.y;
 
                 this.obj.attr({path: this.path});
+                this.a.redraw();
+                this.b.redraw();
             };
 
             this.destroy = function () {
+                this.a.destroy();
                 this.a = null;
+                this.b.destroy();
                 this.b = null;
                 this.path = null;
                 this.obj.remove();
@@ -81,15 +87,21 @@
 
             this.draw = function (paper) {
                 this.obj = paper.circle(this.o.x, this.o.y, MathUtil.distance(o.x, o.y, b.x, b.y)).attr(attr);
+                this.o.draw(paper);
+                this.b.draw(paper);
             };
 
             this.redraw = function () {
                 this.obj.attr({r: MathUtil.distance(o.x, o.y, b.x, b.y)});
+                this.o.redraw();
+                this.b.redraw();
             };
 
             this.destroy = function () {
+                this.o.destroy();
                 this.o = null;
-                this.b = null;
+                this.b.destroy();
+                this.b  = null;
                 this.obj.remove();
                 this.obj = null;
             };
