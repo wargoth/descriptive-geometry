@@ -44,7 +44,7 @@
         function Line(a, b) {
             this.a = a;
             this.b = b;
-            var _path = null
+            var _path = null;
             var _obj = null;
 
             this.draw = function (paper) {
@@ -79,6 +79,10 @@
                 _obj = null;
             };
 
+            /**
+             * Returns tan ⍺ of the line. Infinity if it's parallel to Y axis, 0 if it's parallel to X axis
+             * @returns {*}
+             */
             this.slope = function () {
                 var dx = (this.b.x - this.a.x);
                 if (dx == 0) {
@@ -88,14 +92,26 @@
                 return dy / dx;
             };
 
-            this.yIntercept = function (m) {
+            /**
+             * Returns y-intercept of the line
+             * @param m optional slope
+             * @param o optional point of the line
+             * @returns {*}
+             */
+            this.yIntercept = function (m, o) {
                 m = m || this.slope();
+                o = o || this.a;
                 if (m == Infinity) {
                     return undefined;
                 }
-                return (this.a.y - m * this.a.x );
-            }
+                return (o.y - m * o.x);
+            };
 
+            /**
+             * Returns intersection point with the line or 'undefined'
+             * @param line
+             * @returns Point | undefined
+             */
             this.intersect = function (line) {
                 var a = this.slope();
                 var b = line.slope();
@@ -110,6 +126,31 @@
 
                 return new Point(x, y);
             };
+
+            /**
+             * Returns line perpendicular to the current one
+             * @param point of the line
+             * @returns Ray
+             */
+            this.normal = function (point) {
+                var m = this.slope();
+                var newM;
+                if (m == 0) {
+                    newM = Infinity;
+                } else if (m == Infinity) {
+                    newM = 0;
+                } else {
+                    newM = -m;
+                }
+
+                var b = this.yIntercept(newM, point);
+
+                return new Ray(start, newM, b);
+            };
+        }
+
+        function Ray () {
+
         }
 
         function Circle(o, b) {
