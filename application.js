@@ -25,46 +25,46 @@
                 this.x = 0;
                 this.y = 0;
             }
-            this.obj = null;
+            this._obj = null;
 
             this.draw = function (paper) {
-                this.obj = paper.circle(this.x, this.y, 2).attr(attr).attr({fill: attr.stroke});
+                this._obj = paper.circle(this.x, this.y, 2).attr(attr).attr({fill: attr.stroke});
             };
 
             this.redraw = function () {
-                this.obj.attr({cx: this.x, cy: this.y});
+                this._obj.attr({cx: this.x, cy: this.y});
             };
 
             this.destroy = function () {
-                this.obj.remove();
-                this.obj = null;
+                this._obj.remove();
+                this._obj = null;
             };
         }
 
         function Line(a, b) {
             this.a = a;
             this.b = b;
-            this.path = null;
-            this.obj = null;
+            this._path = null;
+            this._obj = null;
 
             this.draw = function (paper) {
-                this.path = [
+                this._path = [
                     ["M" , this.a.x, this.a.y ],
                     [ "L" , this.b.x, this.b.y]
                 ];
 
-                this.obj = paper.path(this.path).attr(attr);
+                this._obj = paper.path(this._path).attr(attr);
                 this.a.draw(paper);
                 this.b.draw(paper);
             };
 
             this.redraw = function () {
-                this.path[0][1] = this.a.x
-                this.path[0][2] = this.a.y;
-                this.path[1][1] = this.b.x
-                this.path[1][2] = this.b.y;
+                this._path[0][1] = this.a.x
+                this._path[0][2] = this.a.y;
+                this._path[1][1] = this.b.x
+                this._path[1][2] = this.b.y;
 
-                this.obj.attr({path: this.path});
+                this._obj.attr({path: this._path});
                 this.a.redraw();
                 this.b.redraw();
             };
@@ -74,9 +74,9 @@
                 this.a = null;
                 this.b.destroy();
                 this.b = null;
-                this.path = null;
-                this.obj.remove();
-                this.obj = null;
+                this._path = null;
+                this._obj.remove();
+                this._obj = null;
             };
 
             this.slope = function () {
@@ -115,16 +115,16 @@
         function Circle(o, b) {
             this.o = o;
             this.b = b;
-            this.obj = null;
+            this._obj = null;
 
             this.draw = function (paper) {
-                this.obj = paper.circle(this.o.x, this.o.y, MathUtil.distance(o.x, o.y, b.x, b.y)).attr(attr);
+                this._obj = paper.circle(this.o.x, this.o.y, MathUtil.distance(o.x, o.y, b.x, b.y)).attr(attr);
                 this.o.draw(paper);
                 this.b.draw(paper);
             };
 
             this.redraw = function () {
-                this.obj.attr({r: MathUtil.distance(o.x, o.y, b.x, b.y)});
+                this._obj.attr({r: MathUtil.distance(o.x, o.y, b.x, b.y)});
                 this.o.redraw();
                 this.b.redraw();
             };
@@ -134,8 +134,8 @@
                 this.o = null;
                 this.b.destroy();
                 this.b = null;
-                this.obj.remove();
-                this.obj = null;
+                this._obj.remove();
+                this._obj = null;
             };
         }
 
