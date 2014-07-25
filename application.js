@@ -127,31 +127,53 @@
                 return new Point(x, y);
             };
 
-            /**
-             * Returns line perpendicular to the current one
-             * @param point of the line
-             * @returns Ray
-             */
-            this.normal = function (point) {
-                var m = this.slope();
-                var newM;
-                if (m == 0) {
-                    newM = Infinity;
-                } else if (m == Infinity) {
-                    newM = 0;
-                } else {
-                    newM = -m;
+            this.distance = function () {
+                // http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
+                var x0, y0;
+                if (arguments.length == 1) {
+                    x0 = arguments[0].x;
+                    y0 = arguments[0].y;
+                } else if (arguments.length == 2) {
+                    x0 = arguments[0];
+                    y0 = arguments[1];
                 }
+                var x1 = this.a.x;
+                var x2 = this.b.x;
+                var y1 = this.a.y;
+                var y2 = this.b.y;
 
-                var b = this.yIntercept(newM, point);
+                var dx = x2 - x1;
+                var dy = y2 - y1;
 
-                return new Ray(start, newM, b);
+                return Math.abs(dy * x0 - dx * y0 - x1 * y2 + x2 * y1) / Math.sqrt(dx * dx + dy * dy);
             };
+
+//            /**
+//             * Returns line perpendicular to the current one
+//             * @param point of the line
+//             * @returns Ray
+//             */
+//            this.normal = function (point) {
+//                var m = this.slope();
+//                var newM;
+//                if (m == 0) {
+//                    newM = Infinity;
+//                } else if (m == Infinity) {
+//                    newM = 0;
+//                } else {
+//                    newM = -m;
+//                }
+//
+//                var b = this.yIntercept(newM, point);
+//
+//                return new Ray(start, newM, b);
+//            };
         }
 
-        function Ray () {
-
-        }
+//
+//        function Ray () {
+//
+//        }
 
         function Circle(o, b) {
             this.o = o;
