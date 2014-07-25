@@ -14,16 +14,16 @@
 
         var attr = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
 
-        function Point(args) {
-            if (args == undefined) {
+        function Point() {
+            if (arguments.length > 0 && arguments[0] instanceof Point) {
+                this.x = arguments[0].x;
+                this.y = arguments[0].y;
+            } else if (arguments.length == 2) {
+                this.x = arguments[0];
+                this.y = arguments[1];
+            } else {
                 this.x = 0;
                 this.y = 0;
-            } else if (args instanceof Point) {
-                this.x = args.x;
-                this.y = args.y;
-            } else if (args.length == 2) {
-                this.x = args[0];
-                this.y = args[1];
             }
             this.obj = null;
 
@@ -78,6 +78,38 @@
                 this.obj.remove();
                 this.obj = null;
             };
+
+            this.slope = function () {
+                var dx = (this.b.x - this.a.x);
+                if (dx == 0) {
+                    return Infinity;
+                }
+                var dy = (this.b.y - this.a.y);
+                return dy / dx;
+            };
+
+            this.yIntercept = function (m) {
+                m = m || this.slope();
+                if (m == Infinity) {
+                    return undefined;
+                }
+                return (this.a.y - m * this.a.x );
+            }
+
+            this.intersect = function (line) {
+                var a = this.slope();
+                var b = line.slope();
+                if (a == b) {
+                    return undefined;
+                }
+                var c = this.yIntercept(a);
+                var d = line.yIntercept(b);
+
+                var x = (d - c) / (a - b);
+                var y = (a * d - b * c) / (a - b);
+
+                return new Point(x, y);
+            };
         }
 
         function Circle(o, b) {
@@ -101,7 +133,7 @@
                 this.o.destroy();
                 this.o = null;
                 this.b.destroy();
-                this.b  = null;
+                this.b = null;
                 this.obj.remove();
                 this.obj = null;
             };
