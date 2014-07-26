@@ -280,30 +280,21 @@
             };
         }
 
-        var pointB = new Point();
+        var cursorP = new Point();
 
         $(paper.canvas).click(function (e) {
             if (currentObject == null) {
-                var $this = $(this);
-                var position = $this.position();
-
-                var pointA = new Point();
-
-                pointA.x = e.pageX - position.left;
-                pointA.y = e.pageY - position.top;
-
-                pointB.x = e.pageX - position.left;
-                pointB.y = e.pageY - position.top;
+                var pointA = new Point(cursorP);
 
                 var activeControl = $("#controls .active");
                 switch (true) {
                     case activeControl.hasClass("segment"):
-                        var segment = new Segment(pointA, pointB);
+                        var segment = new Segment(pointA, cursorP);
                         segment.draw();
                         currentObject = segment;
                         break;
                     case activeControl.hasClass("circle"):
-                        var circle = new Circle(pointA, pointB);
+                        var circle = new Circle(pointA, cursorP);
                         circle.draw();
                         currentObject = circle;
                         break;
@@ -313,7 +304,7 @@
                         break;
                 }
             } else {
-                currentObject.b = new Point(pointB);
+                currentObject.b = new Point(cursorP);
                 currentObject.redraw();
                 snapWidget.hide();
                 objects.push(currentObject);
@@ -329,8 +320,8 @@
             $.each(objects, function (key, obj) {
                 if (obj instanceof Segment) {
                     $.each([obj.a, obj.b], function (key, p) {
-                        var distance = GeometryUtil.distance(p, pointB);
-                        if (SNAP_THRESHOLD >= distance && distance < nearestDistance) {
+                        var distance = GeometryUtil.distance(p, point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                             nearestDistance = distance;
                             snapPoint = p;
                         }
@@ -342,25 +333,25 @@
                 snapWidget.show();
                 snapWidget.p = snapPoint;
 
-                pointB.x = snapPoint.x;
-                pointB.y = snapPoint.y;
+                point.x = snapPoint.x;
+                point.y = snapPoint.y;
             } else {
                 snapWidget.hide();
             }
         }
 
         $(paper.canvas).mousemove(function (e) {
+            var $this = $(this);
+            var position = $this.position();
+            cursorP.x = e.pageX - position.left;
+            cursorP.y = e.pageY - position.top;
+
+            snapPoint(cursorP);
+            snapWidget.redraw();
+
             if (currentObject != null) {
-                var $this = $(this);
-                var position = $this.position();
-                pointB.x = e.pageX - position.left;
-                pointB.y = e.pageY - position.top;
-
-                snapPoint(pointB);
-
-                currentObject.b = pointB;
+                currentObject.b = cursorP;
                 currentObject.redraw();
-                snapWidget.redraw();
             }
         });
 
