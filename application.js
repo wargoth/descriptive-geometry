@@ -136,19 +136,31 @@
              * @returns {Point}
              */
             this.intersect = function (line) {
-                var a = this.slope();
-                var b = line.slope();
-                if (a == b) {
-                    // parallel
-                    return undefined;
+                if (this.b == 0 || line.b == 0) {
+                    if (this.b == line.b) {
+                        // parallel
+                        return undefined;
+                    }
+                    var verticalLine = this.b == 0 ? this : line;
+                    var otherLine = this.b == 0 ? line : this;
+
+                    var x = verticalLine.x(0);
+                    return new Point(x, otherLine.y(x));
+                } else {
+                    var a = this.slope();
+                    var b = line.slope();
+                    if (a == b) {
+                        // parallel
+                        return undefined;
+                    }
+                    var c = this.yIntercept();
+                    var d = line.yIntercept();
+
+                    var x = (d - c) / (a - b);
+                    var y = (a * d - b * c) / (a - b);
+
+                    return new Point(x, y);
                 }
-                var c = this.yIntercept();
-                var d = line.yIntercept();
-
-                var x = (d - c) / (a - b);
-                var y = (a * d - b * c) / (a - b);
-
-                return new Point(x, y);
             };
 
             this.y = function (x) {
@@ -211,6 +223,10 @@
                 _obj.remove();
                 _obj = null;
             };
+
+            this.translate = function (point) {
+                this.c = -this.b * point.y - this.a * point.x;
+            }
         }
 
         function Segment(a, b) {
@@ -287,7 +303,10 @@
 
                 var normalSegment = new Segment(new Point(-dy, dx), new Point(dy, -dx));
 
-                return new Line(newM, b);
+                var line = normalSegment.asLine();
+                line.translate(point);
+
+                return  line;
             };
 
             /**
