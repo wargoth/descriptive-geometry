@@ -107,8 +107,110 @@
             };
         }
 
-        function Line() {
+        /**
+         * Constructs a new Line object.
+         *
+         * @param slope optional
+         * @param yIntercept optional
+         * @constructor
+         */
+        function Line(a, b, c) {
+            this.a = a;
+            this.b = b;
+            this.c = c;
 
+            var _path = null;
+            var _obj = null;
+
+            this.slope = function () {
+                return -this.a / this.b;
+            };
+
+            this.yIntercept = function () {
+                return -this.c / this.b;
+            };
+
+            /**
+             * Returns intersection point with the line or 'undefined'
+             * @param line
+             * @returns {Point}
+             */
+            this.intersect = function (line) {
+                var a = this.slope();
+                var b = line.slope();
+                if (a == b) {
+                    // parallel
+                    return undefined;
+                }
+                var c = this.yIntercept();
+                var d = line.yIntercept();
+
+                var x = (d - c) / (a - b);
+                var y = (a * d - b * c) / (a - b);
+
+                return new Point(x, y);
+            };
+
+            this.y = function (x) {
+                if (this.a == 0) {
+                    return this.yIntercept();
+                }
+                return  (-this.a * x - this.c) / this.b;
+            };
+
+            this.x = function (y) {
+                if (this.b == 0) {
+                    return -this.c / this.a;
+                }
+                return (-this.b * y - this.c ) / this.a;
+            };
+
+            this.draw = function () {
+                if (this.b == 0) {
+                    if (this.a == 0) {
+                        return; // uninitialized
+                    }
+                    _path = [
+                        ["M" , this.x(0), 0 ],
+                        [ "L" , this.x(0), paper.height]
+                    ];
+                } else {
+                    _path = [
+                        ["M" , 0, this.y(0) ],
+                        [ "L" , paper.width, this.y(paper.width)]
+                    ];
+                }
+
+                _obj = paper.path(_path).attr(attr);
+            };
+
+            this.redraw = function () {
+                if (_obj == null) {
+                    this.draw();
+                }
+                if (this.b == 0) {
+                    if (this.a == 0) {
+                        return; // uninitialized
+                    }
+                    _path[0][1] = this.x(0);
+                    _path[0][2] = 0;
+                    _path[1][1] = this.x(paper.height);
+                    _path[1][2] = paper.height;
+                } else {
+                    _path[0][1] = 0;
+                    _path[0][2] = this.y(0);
+                    _path[1][1] = paper.width;
+                    _path[1][2] = this.y(paper.width);
+                }
+
+                _obj.attr({path: _path});
+            };
+
+            this.destroy = function () {
+                _path = null;
+                _obj.remove();
+                _obj = null;
+            };
         }
 
         function Segment(a, b) {
@@ -116,6 +218,7 @@
             this.b = b;
             var _path = null;
             var _obj = null;
+            var _line = null;
 
             this.draw = function () {
                 _path = [
@@ -152,54 +255,6 @@
                 _obj = null;
             };
 
-            /**
-             * Returns tan ⍺ of the line. Infinity if it's parallel to Y axis, 0 if it's parallel to X axis
-             * @returns {*}
-             */
-            this.slope = function () {
-                var dx = (this.b.x - this.a.x);
-                if (dx == 0) {
-                    return Infinity;
-                }
-                var dy = (this.b.y - this.a.y);
-                return dy / dx;
-            };
-
-            /**
-             * Returns y-intercept of the line
-             * @param m optional slope
-             * @param o optional point on the line
-             * @returns {*}
-             */
-            this.yIntercept = function (m, o) {
-                m = m || this.slope();
-                o = o || this.a;
-                if (m == Infinity) {
-                    return undefined;
-                }
-                return (o.y - m * o.x);
-            };
-
-            /**
-             * Returns intersection point with the line or 'undefined'
-             * @param line
-             * @returns Point | undefined
-             */
-            this.intersect = function (line) {
-                var a = this.slope();
-                var b = line.slope();
-                if (a == b) {
-                    return undefined;
-                }
-                var c = this.yIntercept(a);
-                var d = line.yIntercept(b);
-
-                var x = (d - c) / (a - b);
-                var y = (a * d - b * c) / (a - b);
-
-                return new Point(x, y);
-            };
-
             this.distance = function () {
                 // http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
                 var x0, y0;
@@ -221,34 +276,41 @@
                 return Math.abs(dy * x0 - dx * y0 - x1 * y2 + x2 * y1) / Math.sqrt(dx * dx + dy * dy);
             };
 
-//            /**
-//             * Returns line perpendicular to the current one
-//             * @param point of the line
-//             * @returns Ray
-//             */
-//            this.normal = function (point) {
-//                var m = this.slope();
-//                var newM;
-//                if (m == 0) {
-//                    newM = Infinity;
-//                } else if (m == Infinity) {
-//                    newM = 0;
-//                } else {
-//                    newM = -m;
-//                }
-//
-//                var b = this.yIntercept(newM, point);
-//
-//                return new Ray(start, newM, b);
-//            };
+            /**
+             * Returns line perpendicular to the current one
+             * @param point of the line
+             * @returns {Line}
+             */
+            this.normal = function (point) {
+                var dx = this.b.x - this.a.x;
+                var dy = this.b.y - this.a.y;
+
+                var normalSegment = new Segment(new Point(-dy, dx), new Point(dy, -dx));
+
+                return new Line(newM, b);
+            };
+
+            /**
+             * Returns line going through this segment
+             * @returns {Line}
+             */
+            this.asLine = function () {
+                var a = this.a.y - this.b.y;
+                var b = this.b.x - this.a.x;
+                var c = -b * this.a.y - a * this.a.x;
+
+                if (_line == null) {
+                    _line = new Line(a, b, c);
+                    log(_line);
+                    return _line;
+                } else {
+                    _line.a = a;
+                    _line.b = b;
+                    _line.c = c;
+                    return _line;
+                }
+            };
         }
-
-        Segment.prototype = new Line();
-
-//
-//        function Ray () {
-//
-//        }
 
         function Circle(o, b) {
             this.o = o;
@@ -328,6 +390,18 @@
                     });
                 }
             });
+
+            if (currentObject instanceof Point) {
+                var nearestObjects = [];
+                $.each(objects, function (key, obj) {
+                    if (obj instanceof Segment) {
+                        var distance = obj.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestObjects.push(obj);
+                        }
+                    }
+                });
+            }
 
             if (snapPoint != null) {
                 snapWidget.show();
