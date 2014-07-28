@@ -398,19 +398,24 @@
         function snapPoint(point) {
             var snapPoint = null;
             var nearestDistance = SNAP_THRESHOLD + 1;
-            $.each(objects, function (key, obj) {
-                if (obj instanceof Segment) {
-                    $.each([obj.a, obj.b], function (key, p) {
-                        var distance = GeometryUtil.distance(p, point);
-                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                            nearestDistance = distance;
-                            snapPoint = p;
-                        }
-                    });
-                }
-            });
 
-            if (currentObject instanceof Point) {
+            var activeControl = $("#controls .active");
+
+            if(activeControl.hasClass("segment") || activeControl.hasClass("circle")) {
+                $.each(objects, function (key, obj) {
+                    if (obj instanceof Segment) {
+                        $.each([obj.a, obj.b], function (key, p) {
+                            var distance = GeometryUtil.distance(p, point);
+                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                                nearestDistance = distance;
+                                snapPoint = p;
+                            }
+                        });
+                    }
+                });
+            }
+
+            if (activeControl.hasClass("point")) {
                 var nearestObjects = [];
                 $.each(objects, function (key, obj) {
                     if (obj instanceof Segment) {
@@ -420,6 +425,11 @@
                         }
                     }
                 });
+                if(nearestObjects.length > 1) {
+                    $.each(nearestObjects, function (key, obj) {
+
+                    });
+                }
             }
 
             if (snapPoint != null) {
