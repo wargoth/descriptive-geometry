@@ -13,19 +13,7 @@
         var currentObject = null;
 
         var GeometryUtil = {
-            distance: function () {
-                var x, y, x1, y1;
-                if (arguments.length == 4) {
-                    x = arguments[0];
-                    y = arguments[1];
-                    x1 = arguments[2];
-                    y1 = arguments[3];
-                } else if (arguments.length = 2) {
-                    x = arguments[0].x;
-                    y = arguments[0].y;
-                    x1 = arguments[1].x;
-                    y1 = arguments[1].y;
-                }
+            distance: function (x, y, x1, y1) {
                 var x_2 = (x - x1);
                 var y_2 = (y - y1);
                 return Math.sqrt(x_2 * x_2 + y_2 * y_2);
@@ -34,48 +22,125 @@
 
         function SnapWidget(p) {
             this.p = p || null;
+            this.shape = SnapWidget.Endpoint;
 
-            var _obj = null;
+            var _state = [];
             var _visible = false;
 
-
             this.draw = function () {
-                _obj = paper.rect(this.p.x - SNAP_WIDGET_SIZE / 2, this.p.y - SNAP_WIDGET_SIZE / 2, SNAP_WIDGET_SIZE, SNAP_WIDGET_SIZE)
-                    .attr({stroke: "red", "stroke-width": 2});
+                this.shape.draw(this, _state);
             };
 
             this.redraw = function () {
-                if (!_visible)
-                    return;
-
-                if (_obj == null) {
-                    this.draw();
-                }
-                _obj.attr({
-                    x: this.p.x - SNAP_WIDGET_SIZE / 2,
-                    y: this.p.y - SNAP_WIDGET_SIZE / 2
-                });
+                this.shape.redraw(this, _state, _visible);
             };
 
             this.destroy = function () {
-                _obj.remove();
-                _obj = null;
+                $.each(SnapWidget.AllShapes, function (k, shape) {
+                    shape.destroy(_state);
+                });
+                _state = null;
             };
 
             this.hide = function () {
                 _visible = false;
-                if (_obj != null) {
-                    _obj.hide();
-                }
+                $.each(SnapWidget.AllShapes, function (k, shape) {
+                    shape.hide(_state);
+                });
             };
 
             this.show = function () {
                 _visible = true;
-                if (_obj != null) {
-                    _obj.show();
-                }
+                this.shape.show(_state);
             };
         }
+
+        SnapWidget.Endpoint = {
+            name: "Endpoint",
+            draw: function (widget, state) {
+                var left = widget.p.x - SNAP_WIDGET_SIZE / 2;
+                var top = widget.p.y - SNAP_WIDGET_SIZE / 2;
+                state[this.name] = {};
+                state[this.name]._obj = paper.rect(left, top, SNAP_WIDGET_SIZE, SNAP_WIDGET_SIZE)
+                    .attr({stroke: "red", "stroke-width": 2});
+            },
+            redraw: function (widget, state, visible) {
+                if (!visible)
+                    return;
+
+                if (!state[this.name] || !state[this.name]._obj) {
+                    this.draw(widget, state);
+                }
+                state[this.name]._obj.attr({
+                    x: widget.p.x - SNAP_WIDGET_SIZE / 2,
+                    y: widget.p.y - SNAP_WIDGET_SIZE / 2
+                });
+            },
+            destroy: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.remove();
+                    state[this.name]._obj = null;
+                }
+            },
+            hide: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.hide();
+                }
+            },
+            show: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.show();
+                }
+            }
+        };
+
+        SnapWidget.Intersection = {
+            name: "Intersection",
+            draw: function (widget, state) {
+                var path = [
+                    ["M", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
+                    ["L", widget.p.x + SNAP_WIDGET_SIZE / 2, widget.p.y + SNAP_WIDGET_SIZE / 2 ],
+                    ["M", widget.p.x + SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
+                    ["L", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y + SNAP_WIDGET_SIZE / 2 ]
+                ];
+                state[this.name] = {};
+                state[this.name]._obj = paper.path(path)
+                    .attr({stroke: "red", "stroke-width": 2});
+            },
+            redraw: function (widget, state, visible) {
+                if (!visible)
+                    return;
+
+                if (!state[this.name] || !state[this.name]._obj) {
+                    this.draw(widget, state);
+                }
+                var path = [
+                    ["M", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
+                    ["L", widget.p.x + SNAP_WIDGET_SIZE / 2, widget.p.y + SNAP_WIDGET_SIZE / 2 ],
+                    ["M", widget.p.x + SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
+                    ["L", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y + SNAP_WIDGET_SIZE / 2 ]
+                ];
+                state[this.name]._obj.attr({path: path});
+            },
+            destroy: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.remove();
+                    state[this.name]._obj = null;
+                }
+            },
+            hide: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.hide();
+                }
+            },
+            show: function (state) {
+                if (state[this.name] && state[this.name]._obj) {
+                    state[this.name]._obj.show();
+                }
+            }
+        };
+
+        SnapWidget.AllShapes = [SnapWidget.Endpoint, SnapWidget.Intersection];
 
         function Point() {
             if (arguments.length > 0 && arguments[0] instanceof Point) {
@@ -104,6 +169,10 @@
             this.destroy = function () {
                 _obj.remove();
                 _obj = null;
+            };
+
+            this.distance = function (p) {
+                return GeometryUtil.distance(this.x, this.y, p.x, p.y);
             };
         }
 
@@ -320,7 +389,6 @@
 
                 if (_line == null) {
                     _line = new Line(a, b, c);
-                    log(_line);
                     return _line;
                 } else {
                     _line.a = a;
@@ -328,6 +396,33 @@
                     _line.c = c;
                     return _line;
                 }
+            };
+
+            /**
+             * Returns intersection point with the segment or 'undefined'
+             * @param segment
+             * @returns {Point}
+             */
+            this.intersectSegment = function (segment) {
+                var x = this.asLine().intersect(segment.asLine());
+                if (this.has(x) && segment.has(x))
+                    return x;
+                return undefined;
+            };
+
+            /**
+             * Estimates if the point lies on the segment. However it doesn't check if the point actually belongs to the segment.
+             *
+             * @param point
+             * @returns {Boolean}
+             */
+            this.has = function (point) {
+                if (Math.min(this.a.x, this.b.x) <= point.x && point.x <= Math.max(this.a.x, this.b.x)) {
+                    if (Math.min(this.a.y, this.b.y) <= point.y && point.y <= Math.max(this.a.y, this.b.y)) {
+                        return true;
+                    }
+                }
+                return false;
             };
         }
 
@@ -337,7 +432,7 @@
             var _obj = null;
 
             this.draw = function () {
-                _obj = paper.circle(this.o.x, this.o.y, GeometryUtil.distance(o.x, o.y, b.x, b.y)).attr(attr);
+                _obj = paper.circle(this.o.x, this.o.y, o.distance(b)).attr(attr);
                 this.o.draw();
                 this.b.draw();
             };
@@ -346,7 +441,7 @@
                 if (_obj == null) {
                     this.draw();
                 }
-                _obj.attr({r: GeometryUtil.distance(o.x, o.y, b.x, b.y)});
+                _obj.attr({r: o.distance(b)});
                 this.o.redraw();
                 this.b.redraw();
             };
@@ -401,13 +496,14 @@
 
             var activeControl = $("#controls .active");
 
-            if(activeControl.hasClass("segment") || activeControl.hasClass("circle")) {
+            if (activeControl.hasClass("segment") || activeControl.hasClass("circle")) {
                 $.each(objects, function (key, obj) {
                     if (obj instanceof Segment) {
                         $.each([obj.a, obj.b], function (key, p) {
-                            var distance = GeometryUtil.distance(p, point);
+                            var distance = p.distance(point);
                             if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                                 nearestDistance = distance;
+                                snapWidget.shape = SnapWidget.Endpoint;
                                 snapPoint = p;
                             }
                         });
@@ -425,9 +521,19 @@
                         }
                     }
                 });
-                if(nearestObjects.length > 1) {
-                    $.each(nearestObjects, function (key, obj) {
-
+                while (nearestObjects.length > 1) {
+                    var one = nearestObjects.pop();
+                    $.each(nearestObjects, function (key, two) {
+                        var x = one.intersectSegment(two);
+                        if (!x) {
+                            return;
+                        }
+                        var distance = x.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestDistance = distance;
+                            snapWidget.shape = SnapWidget.Intersection;
+                            snapPoint = x;
+                        }
                     });
                 }
             }
