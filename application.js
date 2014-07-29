@@ -339,7 +339,7 @@ G.Point = function () {
 };
 
 /**
- * Constructs a new Line object.
+ * Constructs a new Line object. Line defined as general form Ax + By + C = 0
  *
  * @param slope optional
  * @param yIntercept optional
@@ -591,6 +591,7 @@ G.Segment = function (a, b) {
         _obj = null;
     };
 
+    // FIXME: doesn't account limited segment
     this.distance = function () {
         // http://en.wikipedia.org/wiki/Distance_from_a_point_to_a_line#Line_defined_by_two_points
         var x0, y0;
@@ -722,14 +723,14 @@ G.Circle = function (o, b) {
     };
 
     this.radius = function () {
-        return o.distance(b);
+        return this.o.distance(this.b);
     };
 
     this.redraw = function (paper) {
         if (_obj == null) {
             this.draw(paper);
         }
-        _obj.attr({r: o.distance(b)});
+        _obj.attr({r: this.o.distance(this.b)});
         this.o.redraw(paper);
         this.b.redraw(paper);
     };
@@ -761,6 +762,9 @@ G.Circle = function (o, b) {
         if (obj instanceof G.Circle) {
             return this.intersectCircle(obj);
         }
+        if (obj instanceof G.Line) {
+            return obj.intersectCircle(this);
+        }
         log(obj);
         throw "not implemented for " + obj;
     };
@@ -785,10 +789,17 @@ G.Circle = function (o, b) {
             return [];
         }
         var x1 = this.o.x;
+        var y1 = this.o.y;
         var x2 = circ.o.x;
-        if(x1 - x2 == 0) {
-            y = 
-        }
+        var y2 = circ.o.y;
+
+        var a = 2 * (x2 - x1);
+        var b = 2 * (y2 - y1);
+        var c = r2 * r2 - r1 * r1 + x1 * x1 - x2 * x2 + y1 * y1 - y2 * y2;
+
+        var line = new G.Line(a, b, c);
+
+        return line.intersect(circ);
     };
 };
 
