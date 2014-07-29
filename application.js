@@ -477,6 +477,7 @@
                     case activeControl.hasClass("point"):
                         var point = new Point(pointA);
                         point.draw();
+                        objects.push(point);
                         break;
                 }
             } else {
@@ -498,15 +499,19 @@
 
             if (activeControl.hasClass("segment") || activeControl.hasClass("circle")) {
                 $.each(objects, function (key, obj) {
+                    function snapToPoint(k, p) {
+                        var distance = p.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestDistance = distance;
+                            snapWidget.shape = SnapWidget.Endpoint;
+                            snapPoint = p;
+                        }
+                    }
+
                     if (obj instanceof Segment) {
-                        $.each([obj.a, obj.b], function (key, p) {
-                            var distance = p.distance(point);
-                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                                nearestDistance = distance;
-                                snapWidget.shape = SnapWidget.Endpoint;
-                                snapPoint = p;
-                            }
-                        });
+                        $.each([obj.a, obj.b], snapToPoint);
+                    } else if (obj instanceof Point) {
+                        snapToPoint(null, obj);
                     }
                 });
             }
@@ -598,7 +603,7 @@
                     currentObject = null;
                 }
             }
-        })
+        });
     });
 })(jQuery);
 
