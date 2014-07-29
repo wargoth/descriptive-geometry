@@ -94,28 +94,15 @@ var Geometry = G = function (target) {
             while (nearestObjects.length > 1) {
                 var one = nearestObjects.pop();
                 $.each(nearestObjects, function (key, two) {
-                    if (one instanceof G.Segment && two instanceof G.Segment) {
-                        var x = one.intersectSegment(two);
-                        if (!x) {
-                            return;
-                        }
-                        var distance = x.distance(point);
+                    var ps = two.intersect(one);
+                    $.each(ps, function (k, p) {
+                        var distance = p.distance(point);
                         if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                             nearestDistance = distance;
                             snapWidget.shape = G.SnapWidget.Intersection;
-                            snapPoint = x;
+                            snapPoint = p;
                         }
-                    } else if (one instanceof  G.Circle && two instanceof G.Segment) {
-                        var ps = two.intersectCircle(one);
-                        $.each(ps, function (k, p) {
-                            var distance = p.distance(point);
-                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                                nearestDistance = distance;
-                                snapWidget.shape = G.SnapWidget.Intersection;
-                                snapPoint = p;
-                            }
-                        });
-                    }
+                    });
                 });
             }
         }
@@ -229,7 +216,7 @@ G.SnapWidget = function (p) {
         _visible = true;
         this.shape.show(_state);
     };
-}
+};
 
 G.SnapWidget.Endpoint = {
     name: "Endpoint",
@@ -350,7 +337,7 @@ G.Point = function () {
     this.distance = function (p) {
         return G.Util.distance(this.x, this.y, p.x, p.y);
     };
-}
+};
 
 /**
  * Constructs a new Line object.
@@ -376,27 +363,42 @@ G.Line = function (a, b, c) {
     };
 
     /**
+     * Returns intersection point with G.Line, G.Circle or empty array
+     * @param obj of type G.Line, G.Circle
+     * @returns [G.Point]
+     */
+    this.intersect = function (obj) {
+        if (obj instanceof G.Line) {
+            return this.intersectLine(obj);
+        }
+        if (obj instanceof G.Circle) {
+            return this.intersectCircle(obj);
+        }
+        log(obj);
+        throw "not implemented for " + obj;
+    };
+    /**
      * Returns intersection point with the line or 'undefined'
      * @param line
-     * @returns {G.Point}
+     * @returns [G.Point]
      */
-    this.intersect = function (line) {
+    this.intersectLine = function (line) {
         if (this.b == 0 || line.b == 0) {
             if (this.b == line.b) {
                 // parallel
-                return undefined;
+                return [];
             }
             var verticalLine = this.b == 0 ? this : line;
             var otherLine = this.b == 0 ? line : this;
 
             var x = verticalLine.x(0);
-            return new G.Point(x, otherLine.y(x));
+            return [new G.Point(x, otherLine.y(x))];
         } else {
             var a = this.slope();
             var b = line.slope();
             if (a == b) {
                 // parallel
-                return undefined;
+                return [];
             }
             var c = this.yIntercept();
             var d = line.yIntercept();
@@ -404,7 +406,7 @@ G.Line = function (a, b, c) {
             var x = (d - c) / (a - b);
             var y = (a * d - b * c) / (a - b);
 
-            return new G.Point(x, y);
+            return [new G.Point(x, y)];
         }
     };
 
@@ -471,7 +473,7 @@ G.Line = function (a, b, c) {
 
     this.translate = function (point) {
         this.c = -this.b * point.y - this.a * point.x;
-    }
+    };
 
     this._solveForVertical = function (circ) {
         var a = this.a;
@@ -501,7 +503,7 @@ G.Line = function (a, b, c) {
         return $.map(y(D), function (y) {
             return new G.Point(x, y);
         });
-    }
+    };
 
     this._solveForGeneralCase = function (circ) {
         var a = this.a;
@@ -531,12 +533,12 @@ G.Line = function (a, b, c) {
             D = Math.sqrt(D);
 
             return [(-B - D) / (2 * A), (-B + D) / (2 * A)];
-        }
+        };
 
         return $.map(x(D), function (x) {
             return new G.Point(x, y(x));
         });
-    }
+    };
 
     this.intersectCircle = function (circ) {
         if (this.b == 0) {
@@ -569,9 +571,9 @@ G.Segment = function (a, b) {
         if (_obj == null) {
             this.draw(paper);
         }
-        _path[0][1] = this.a.x
+        _path[0][1] = this.a.x;
         _path[0][2] = this.a.y;
-        _path[1][1] = this.b.x
+        _path[1][1] = this.b.x;
         _path[1][2] = this.b.y;
 
         _obj.attr({path: _path});
@@ -648,21 +650,37 @@ G.Segment = function (a, b) {
     };
 
     /**
-     * Returns intersection point with the segment or 'undefined'
+     * Returns intersection point with G.Segment, G.Circle or empty array
+     * @param obj of type G.Segment, G.Circle
+     * @returns [G.Point]
+     */
+    this.intersect = function (obj) {
+        if (obj instanceof G.Segment) {
+            return this.intersectSegment(obj);
+        }
+        if (obj instanceof G.Circle) {
+            return this.intersectCircle(obj);
+        }
+        log(obj);
+        throw "not implemented for " + obj;
+    };
+
+    /**
+     * Returns intersection point with the segment or empty array
      * @param segment
-     * @returns {Point}
+     * @returns [G.Point]
      */
     this.intersectSegment = function (segment) {
-        var x = this.asLine().intersect(segment.asLine());
-        if (this.has(x) && segment.has(x))
-            return x;
-        return undefined;
+        var p = this.asLine().intersect(segment.asLine());
+        if (p.length > 0 && this.has(p[0]) && segment.has(p[0]))
+            return p;
+        return [];
     };
 
     /**
      * Returns intersection points with the circle or empty array
      * @param circle
-     * @returns [Point]
+     * @returns [G.Point]
      */
     this.intersectCircle = function (circle) {
         var self = this;
@@ -690,7 +708,7 @@ G.Segment = function (a, b) {
         }
         return false;
     };
-}
+};
 
 G.Circle = function (o, b) {
     this.o = o;
@@ -729,6 +747,19 @@ G.Circle = function (o, b) {
         var distanceToCenter = G.Util.distance(p.x, p.y, this.o.x, this.o.y);
 
         return Math.abs(distanceToCenter - this.radius());
+    };
+
+    /**
+     * Returns intersection point with G.Segment, G.Circle or empty array
+     * @param obj of type G.Segment, G.Circle
+     * @returns [G.Point]
+     */
+    this.intersect = function (obj) {
+        if (obj instanceof G.Segment) {
+            return obj.intersectCircle(this);
+        }
+        log(obj);
+        throw "not implemented for " + obj;
     };
 };
 
