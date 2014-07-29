@@ -332,6 +332,10 @@ G.Point = function () {
     this.distance = function (p) {
         return G.Util.distance(this.x, this.y, p.x, p.y);
     };
+
+    this.equals = function (p) {
+        return p.x == this.x && p.y == this.y;
+    };
 };
 
 /**
@@ -767,7 +771,24 @@ G.Circle = function (o, b) {
      * @returns [G.Point]
      */
     this.intersectCircle = function (circ) {
-
+        // http://math.stackexchange.com/a/256123
+        if (this.o.equals(circ.o)) {
+            return [];
+        }
+        var d = this.o.distance(circ.o);
+        var r1 = this.radius();
+        var r2 = circ.radius();
+        if (d > r1 + r2) {
+            return [];
+        }
+        if (d < Math.abs(r1 - r2)) {
+            return [];
+        }
+        var x1 = this.o.x;
+        var x2 = circ.o.x;
+        if(x1 - x2 == 0) {
+            y = 
+        }
     };
 };
 
