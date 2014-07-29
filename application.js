@@ -79,12 +79,7 @@ var Geometry = G = function (target) {
         if (activeControl.hasClass("point")) {
             var nearestObjects = [];
             $.each(objects, function (key, obj) {
-                if (obj instanceof G.Segment) {
-                    var distance = obj.distance(point);
-                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestObjects.push(obj);
-                    }
-                } else if (obj instanceof G.Circle) {
+                if (obj instanceof G.Segment || obj instanceof G.Circle) {
                     var distance = obj.distance(point);
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                         nearestObjects.push(obj);
@@ -377,6 +372,7 @@ G.Line = function (a, b, c) {
         log(obj);
         throw "not implemented for " + obj;
     };
+
     /**
      * Returns intersection point with the line or 'undefined'
      * @param line
@@ -758,8 +754,20 @@ G.Circle = function (o, b) {
         if (obj instanceof G.Segment) {
             return obj.intersectCircle(this);
         }
+        if (obj instanceof G.Circle) {
+            return this.intersectCircle(obj);
+        }
         log(obj);
         throw "not implemented for " + obj;
+    };
+
+    /**
+     * Returns intersection point with G.Circle or empty array
+     * @param obj of type G.Circle
+     * @returns [G.Point]
+     */
+    this.intersectCircle = function (circ) {
+
     };
 };
 
