@@ -4,8 +4,9 @@ var POINT_SIZE = 2;
 var SNAP_WIDGET_SIZE = 15;
 var attr = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
 
+var $ = jQuery;
+
 var Geometry = G = function (target) {
-    var $ = jQuery;
 
     target = target || "target";
 
@@ -83,20 +84,37 @@ var Geometry = G = function (target) {
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                         nearestObjects.push(obj);
                     }
+                } else if (obj instanceof G.Circle) {
+                    var distance = obj.distance(point);
+                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                        nearestObjects.push(obj);
+                    }
                 }
             });
             while (nearestObjects.length > 1) {
                 var one = nearestObjects.pop();
                 $.each(nearestObjects, function (key, two) {
-                    var x = one.intersectSegment(two);
-                    if (!x) {
-                        return;
-                    }
-                    var distance = x.distance(point);
-                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestDistance = distance;
-                        snapWidget.shape = G.SnapWidget.Intersection;
-                        snapPoint = x;
+                    if (one instanceof G.Segment && two instanceof G.Segment) {
+                        var x = one.intersectSegment(two);
+                        if (!x) {
+                            return;
+                        }
+                        var distance = x.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestDistance = distance;
+                            snapWidget.shape = G.SnapWidget.Intersection;
+                            snapPoint = x;
+                        }
+                    } else if (one instanceof  G.Circle && two instanceof G.Segment) {
+                        var ps = two.intersectCircle(one);
+                        $.each(ps, function (k, p) {
+                            var distance = p.distance(point);
+                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                                nearestDistance = distance;
+                                snapWidget.shape = G.SnapWidget.Intersection;
+                                snapPoint = p;
+                            }
+                        });
                     }
                 });
             }
@@ -454,7 +472,80 @@ G.Line = function (a, b, c) {
     this.translate = function (point) {
         this.c = -this.b * point.y - this.a * point.x;
     }
-}
+
+    this._solveForVertical = function (circ) {
+        var a = this.a;
+        var b = this.b;
+        var c = this.c;
+        var a1 = circ.o.x;
+        var b1 = circ.o.y;
+        var r = circ.radius();
+        var x = -c / a;
+        var A = 1;
+        var B = -2 * b1;
+        var C = b1 * b1 - r * r + Math.pow(-c / a - a1, 2);
+        var D = B * B - 4 * A * C;
+
+        var y = function (D) {
+            if (D < 0) {
+                return [];
+            }
+            if (D == 0) {
+                return [-B / (2 * A)];
+            }
+            D = Math.sqrt(D);
+
+            return [(-B - D) / (2 * A), (-B + D) / (2 * A)];
+        };
+
+        return $.map(y(D), function (y) {
+            return new G.Point(x, y);
+        });
+    }
+
+    this._solveForGeneralCase = function (circ) {
+        var a = this.a;
+        var b = this.b;
+        var c = this.c;
+        var a1 = circ.o.x;
+        var b1 = circ.o.y;
+        var r = circ.radius();
+        var y = function (x) {
+            return -c / b - a / b * x;
+        };
+
+        var m = -c / b - b1;
+        var A = 1 + a * a / (b * b);
+        var B = -2 * ( m * a / b + a1);
+        var C = -r * r + a1 * a1 + m * m;
+
+        var D = B * B - 4 * A * C;
+
+        var x = function (D) {
+            if (D < 0) {
+                return [];
+            }
+            if (D == 0) {
+                return [-B / (2 * A)];
+            }
+            D = Math.sqrt(D);
+
+            return [(-B - D) / (2 * A), (-B + D) / (2 * A)];
+        }
+
+        return $.map(x(D), function (x) {
+            return new G.Point(x, y(x));
+        });
+    }
+
+    this.intersectCircle = function (circ) {
+        if (this.b == 0) {
+            return this._solveForVertical(circ);
+        } else {
+            return this._solveForGeneralCase(circ);
+        }
+    };
+};
 
 G.Segment = function (a, b) {
     this.a = a;
@@ -569,6 +660,23 @@ G.Segment = function (a, b) {
     };
 
     /**
+     * Returns intersection points with the circle or empty array
+     * @param circle
+     * @returns [Point]
+     */
+    this.intersectCircle = function (circle) {
+        var self = this;
+        var result = [];
+        var points = this.asLine().intersectCircle(circle);
+        $.each(points, function (k, p) {
+            if (self.has(p)) {
+                result.push(p);
+            }
+        });
+        return result;
+    };
+
+    /**
      * Estimates if the point lies on the segment. However it doesn't check if the point actually belongs to the segment.
      *
      * @param point
@@ -590,9 +698,13 @@ G.Circle = function (o, b) {
     var _obj = null;
 
     this.draw = function (paper) {
-        _obj = paper.circle(this.o.x, this.o.y, o.distance(b)).attr(attr);
+        _obj = paper.circle(this.o.x, this.o.y, this.radius()).attr(attr);
         this.o.draw(paper);
         this.b.draw(paper);
+    };
+
+    this.radius = function () {
+        return o.distance(b);
     };
 
     this.redraw = function (paper) {
@@ -612,13 +724,31 @@ G.Circle = function (o, b) {
         _obj.remove();
         _obj = null;
     };
+
+    this.distance = function (p) {
+        var distanceToCenter = G.Util.distance(p.x, p.y, this.o.x, this.o.y);
+
+        return Math.abs(distanceToCenter - this.radius());
+    };
 };
 
 $(function () {
     var geometry = new Geometry("target");
 
-    var point = new G.Segment(new G.Point(500, 400), new G.Point(800, 400));
-    geometry.addObject(point);
+    var segment = new G.Segment(new G.Point(500, 400), new G.Point(800, 500));
+    geometry.addObject(segment);
+
+    var vertical1 = new G.Segment(new G.Point(700, 150), new G.Point(700, 500));
+    geometry.addObject(vertical1);
+
+    var vertical2 = new G.Segment(new G.Point(650, 150), new G.Point(650, 700));
+    geometry.addObject(vertical2);
+
+    var horizontal = new G.Segment(new G.Point(300, 200), new G.Point(800, 200));
+    geometry.addObject(horizontal);
+
+    var circle = new G.Circle(new G.Point(500, 400), new G.Point(500, 600));
+    geometry.addObject(circle);
 });
 
 function pr(obj) {
