@@ -3,16 +3,26 @@ var KEYCODE_ESC = 27
 var POINT_SIZE = 2;
 var SNAP_WIDGET_SIZE = 15;
 var attr = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
+var TESTS_ENABLED = true;
 
 var $ = jQuery;
 
-var Geometry = G = function (target) {
+var tests = [];
 
+var Geometry = G = function (target) {
+    var self = this;
     target = target || "target";
 
     var paper = this.paper = Raphael(target);
 
     var objects = this.objects = [];
+
+    this.objectCreatedCallbacks = [];
+    this.objectCreatedCallbacks.notify = function (obj) {
+        $.each(this, function (k, callback) {
+            callback.call(self, obj);
+        });
+    };
 
     var currentObject = null;
 
@@ -38,13 +48,17 @@ var Geometry = G = function (target) {
                     var point = new G.Point(pointA);
                     point.draw(paper);
                     objects.push(point);
+                    self.objectCreatedCallbacks.notify(point);
                     break;
             }
         } else {
+            snapWidget.hide();
+
             currentObject.b = new G.Point(cursorP);
             currentObject.redraw(paper);
-            snapWidget.hide();
             objects.push(currentObject);
+            self.objectCreatedCallbacks.notify(currentObject);
+
             currentObject = null;
         }
     });
@@ -165,9 +179,24 @@ var Geometry = G = function (target) {
     });
 };
 
+G.prototype.onObjectCreated = function (callback) {
+    this.objectCreatedCallbacks.push(callback);
+};
+
 G.prototype.addObject = function (obj) {
     this.objects.push(obj);
     obj.draw(this.paper);
+};
+
+G.prototype.testCreated = function (obj) {
+    var ret = false;
+    $.each(this.objects, function (k, v) {
+        if (obj.equals(v)) {
+            ret = true;
+            return false; // break;
+        }
+    });
+    return ret;
 };
 
 G.Util = {
@@ -175,8 +204,21 @@ G.Util = {
         var x_2 = (x - x1);
         var y_2 = (y - y1);
         return Math.sqrt(x_2 * x_2 + y_2 * y_2);
+    },
+    eq: function (a, b, maxdiff) {
+        maxdiff = maxdiff || 0.0000001;
+        if (a === b) {
+            return true;
+        }
+        return Math.abs(a - b) < maxdiff;
     }
 };
+
+test(function () {
+    assertTrue(!G.Util.eq(0.4999999565, 20 / 40, 0.00000001));
+    assertTrue(G.Util.eq(0.4999999565, 20 / 40, 0.0000001));
+    assertTrue(G.Util.eq(0.5, 20 / 40, 0.001));
+});
 
 G.SnapWidget = function (p) {
     this.p = p || null;
@@ -334,7 +376,7 @@ G.Point = function () {
     };
 
     this.equals = function (p) {
-        return p.x == this.x && p.y == this.y;
+        return p instanceof  G.Point && p.x == this.x && p.y == this.y;
     };
 };
 
@@ -547,7 +589,55 @@ G.Line = function (a, b, c) {
             return this._solveForGeneralCase(circ);
         }
     };
+
+    this.equals = function (obj) {
+        if (obj instanceof G.Segment) {
+            return obj.equals(this);
+        }
+
+        if (!(obj instanceof G.Line)) {
+            return false;
+        }
+
+        var norm = Math.min(this.a / obj.a, this.b / obj.b);
+
+        var ret = false;
+        $.each([
+            [this.a , obj.a],
+            [this.b , obj.b],
+            [this.c , obj.c]
+        ], function (k, v) {
+            if (v[0] == 0 && v[1] == 0) {
+                return true;
+            }
+            if (G.Util.eq(norm, v[0] / v[1], 0.0000001)) {
+                ret = true;
+                return true;
+            }
+            ret = false;
+            return false;
+        });
+        return ret;
+    };
+
+    this.has = function (p) {
+        return G.Util.eq(this.a * p.x + this.b * p.y + this.c, 0, 0.0000001);
+    };
 };
+
+test(function () {
+    var line1 = new G.Line(10.0, 20.0, 30.0);
+    var line2 = new G.Line(20.0, 40.0, 60.0);
+
+    assertTrue(line1.equals(line2));
+});
+
+test(function () {
+    var line1 = new G.Line(10.0, 20.0, 30.0);
+    var line2 = new G.Line(20.0001, 40.0, 60.0);
+
+    assertTrue(!line1.equals(line2));
+});
 
 G.Segment = function (a, b) {
     this.a = a;
@@ -709,6 +799,13 @@ G.Segment = function (a, b) {
         }
         return false;
     };
+
+    this.equals = function (obj) {
+        if (obj instanceof G.Line) {
+            return obj.has(this.a) && obj.has(this.b);
+        }
+        return false;
+    };
 };
 
 G.Circle = function (o, b) {
@@ -801,25 +898,31 @@ G.Circle = function (o, b) {
 
         return line.intersect(circ);
     };
+
+    this.equals = function (obj) {
+        return false;
+    };
 };
 
 $(function () {
     var geometry = new Geometry("target");
 
-    var segment = new G.Segment(new G.Point(500, 400), new G.Point(800, 500));
-    geometry.addObject(segment);
-
-    var vertical1 = new G.Segment(new G.Point(700, 150), new G.Point(700, 500));
-    geometry.addObject(vertical1);
-
-    var vertical2 = new G.Segment(new G.Point(650, 150), new G.Point(650, 700));
-    geometry.addObject(vertical2);
-
-    var horizontal = new G.Segment(new G.Point(300, 200), new G.Point(800, 200));
+    var horizontal = new G.Segment(new G.Point(500, 500), new G.Point(800, 500));
     geometry.addObject(horizontal);
 
-    var circle = new G.Circle(new G.Point(500, 400), new G.Point(500, 600));
-    geometry.addObject(circle);
+    var point = new G.Point(650, 350);
+    geometry.addObject(point);
+
+    var testLine1 = new G.Line(259.8076211353316, 150, -204903.8105676658);
+    var testLine2 = new G.Line(-259.8076211353316, 150, 132846.0969082653);
+
+    geometry.onObjectCreated(watchdog);
+
+    geometry.onObjectCreated(function (obj) {
+        if (geometry.testCreated(testLine1) && geometry.testCreated(testLine2)) {
+            pr("yay!");
+        }
+    });
 });
 
 function pr(obj) {
@@ -828,4 +931,50 @@ function pr(obj) {
 
 function log(obj) {
     console.log(obj);
+}
+
+function watchdog(obj) {
+    if (obj instanceof  G.Segment) {
+        console.log("Segment created", obj, obj.asLine());
+    } else {
+        console.log("Object created", obj);
+    }
+}
+
+function test(func) {
+    if (!TESTS_ENABLED) {
+        return;
+    }
+    tests.push(func);
+}
+
+if (TESTS_ENABLED) {
+    function assertTrue(x, message) {
+        if (x)
+            return;
+        console.error("assertion failed", message);
+        throw "error";
+    }
+
+    function assertEquals(a, b, message) {
+        if (a == b)
+            return;
+        console.error(message || "assertion failed", "Expected:", a, " got:", b);
+        throw "error";
+    }
+
+    var run = 0;
+    var passed = 0;
+
+    $.each(tests, function (k, test) {
+        try {
+            run++;
+            test.call();
+        } catch (e) {
+            return;
+        }
+        passed++;
+    });
+
+    console.log("Tests run:", run, "passed:", passed, "failed:", run - passed);
 }
