@@ -11,8 +11,14 @@
             height: 500px;
             border: 1px solid #ccc;
         }
+
         #controls .active {
             font-weight: bold;
+        }
+
+        fieldset {
+            margin: 1em 0;
+            width: 700px;
         }
     </style>
 </head>
@@ -20,13 +26,20 @@
 
 <p>Construct a line (segment) that goes through point A and that is perpendicular to the given line segment.</p>
 
-<div>
-    <ul id="controls">
-        <li><input type="button" value="segment" class="segment active"/></li>
-        <li><input type="button" value="circle" class="circle"/></li>
-        <li><input type="button" value="point" class="point"/></li>
-    </ul>
-</div>
+<fieldset id="controls">
+    <legend>Tool</legend>
+    <label><input type="radio" name="tool" value="segment" checked/> Segment</label>
+    <label><input type="radio" name="tool" value="circle"/> Circle</label>
+    <label><input type="radio" name="tool" value="point"/> Point</label>
+</fieldset>
+
+<fieldset id="snapping">
+    <legend>Snapping</legend>
+    <label><input type="radio" name="snapping" value="none" checked/> None</label>
+    <label><input type="radio" name="snapping" value="endpoint"/> Endpoints</label>
+    <label><input type="radio" name="snapping" value="intersection"/> Intersections</label>
+    <label><input type="radio" name="snapping" value="all"/> All</label>
+</fieldset>
 
 <div id="target"></div>
 

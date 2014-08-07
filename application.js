@@ -32,19 +32,19 @@ var Geometry = G = function (target) {
         if (currentObject == null) {
             var pointA = new G.Point(cursorP);
 
-            var activeControl = $("#controls .active");
-            switch (true) {
-                case activeControl.hasClass("segment"):
+            var activeControl = $("#controls input[name=tool]:checked");
+            switch (activeControl.val()) {
+                case "segment":
                     var segment = new G.Segment(pointA, cursorP);
                     segment.draw(paper);
                     currentObject = segment;
                     break;
-                case activeControl.hasClass("circle"):
+                case "circle":
                     var circle = new G.Circle(pointA, cursorP);
                     circle.draw(paper);
                     currentObject = circle;
                     break;
-                case activeControl.hasClass("point"):
+                case "point":
                     var point = new G.Point(pointA);
                     point.draw(paper);
                     objects.push(point);
@@ -69,9 +69,9 @@ var Geometry = G = function (target) {
         var snapPoint = null;
         var nearestDistance = SNAP_THRESHOLD + 1;
 
-        var activeControl = $("#controls .active");
+        var snapping = $("#snapping input:checked");
 
-        if (activeControl.hasClass("segment") || activeControl.hasClass("circle")) {
+        if ($.inArray(snapping.val(), ["endpoint", "all"]) > -1) {
             $.each(objects, function (key, obj) {
                 function snapToPoint(k, p) {
                     var distance = p.distance(point);
@@ -90,7 +90,7 @@ var Geometry = G = function (target) {
             });
         }
 
-        if (activeControl.hasClass("point")) {
+        if ($.inArray(snapping.val(), ["intersection", "all"]) > -1) {
             var nearestObjects = [];
             $.each(objects, function (key, obj) {
                 if (obj instanceof G.Segment || obj instanceof G.Circle) {
@@ -142,29 +142,11 @@ var Geometry = G = function (target) {
         }
     });
 
-    var controls = {segment: $("#controls .segment"), circle: $("#controls .circle"), point: $("#controls .point")};
-    controls.reset = function () {
-        $.each(this, function (key, val) {
-            if (typeof (val) == "function")
-                return;
-
-            val.removeClass("active");
-        });
-    };
-
-    $.each(controls, function (key, control) {
-        if (typeof (control) == "function")
-            return;
-
-        control.click(function () {
-            controls.reset();
-            control.addClass("active");
-
-            if (currentObject != null) {
-                currentObject.destroy();
-                currentObject = null;
-            }
-        });
+    $("#controls input:radio").click(function () {
+        if (currentObject != null) {
+            currentObject.destroy();
+            currentObject = null;
+        }
     });
 
     $(document).keyup(function (e) {
