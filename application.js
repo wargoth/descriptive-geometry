@@ -2,7 +2,7 @@ var SNAP_THRESHOLD = 10;
 var KEYCODE_ESC = 27
 var POINT_SIZE = 2;
 var SNAP_WIDGET_SIZE = 15;
-var attr = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
+var STROKE_ATTR = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
 var TESTS_ENABLED = true;
 
 var $ = jQuery;
@@ -356,7 +356,7 @@ G.Point = function () {
     var _obj = null;
 
     this.draw = function (paper) {
-        _obj = paper.circle(this.x, this.y, POINT_SIZE).attr(attr).attr({fill: attr.stroke});
+        _obj = paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR).attr({fill: STROKE_ATTR.stroke});
     };
 
     this.redraw = function (paper) {
@@ -411,6 +411,9 @@ G.Line = function (a, b, c) {
     this.intersect = function (obj) {
         if (obj instanceof G.Line) {
             return this.intersectLine(obj);
+        }
+        if (obj instanceof G.Segment) {
+            return obj.intersect(this);
         }
         if (obj instanceof G.Circle) {
             return this.intersectCircle(obj);
@@ -482,7 +485,7 @@ G.Line = function (a, b, c) {
             ];
         }
 
-        _obj = paper.path(_path).attr(attr);
+        _obj = paper.path(_path).attr(STROKE_ATTR);
     };
 
     this.redraw = function (paper) {
@@ -629,7 +632,7 @@ test(function () {
     var line1 = new G.Line(10.0, 20.0, 30.0);
     var line2 = new G.Line(20.0, 40.0, 60.0);
 
-    assertTrue(line1.equals(line2));
+    assertEquals(line1, line2);
 });
 
 test(function () {
@@ -652,7 +655,7 @@ G.Segment = function (a, b) {
             [ "L" , this.b.x, this.b.y]
         ];
 
-        _obj = paper.path(_path).attr(attr);
+        _obj = paper.path(_path).attr(STROKE_ATTR);
         this.a.draw(paper);
         this.b.draw(paper);
     };
@@ -749,6 +752,9 @@ G.Segment = function (a, b) {
         if (obj instanceof G.Segment) {
             return this.intersectSegment(obj);
         }
+        if (obj instanceof G.Line) {
+            return this.intersectLine(obj);
+        }
         if (obj instanceof G.Circle) {
             return this.intersectCircle(obj);
         }
@@ -764,6 +770,18 @@ G.Segment = function (a, b) {
     this.intersectSegment = function (segment) {
         var p = this.asLine().intersect(segment.asLine());
         if (p.length > 0 && this.has(p[0]) && segment.has(p[0]))
+            return p;
+        return [];
+    };
+
+    /**
+     * Returns intersection point with the line or empty array
+     * @param line
+     * @returns [G.Point]
+     */
+    this.intersectLine = function (line) {
+        var p = this.asLine().intersect(line);
+        if (p.length > 0 && this.has(p[0]) && line.has(p[0]))
             return p;
         return [];
     };
@@ -808,13 +826,46 @@ G.Segment = function (a, b) {
     };
 };
 
+test(function () {
+    // two intersecting segments
+    var segment1 = new G.Segment(new G.Point(-3, -3), new G.Point(0, 0));
+    var segment2 = new G.Segment(new G.Point(-2, 0), new G.Point(-2, -50));
+    var intersection = segment1.intersect(segment2);
+    assertEquals(new G.Point(-2, -2), intersection[0]);
+});
+
+test(function () {
+    // two non-intersecting segments
+    var segment1 = new G.Segment(new G.Point(-3, -3), new G.Point(0, 0));
+    var segment2 = new G.Segment(new G.Point(-2, 0), new G.Point(-2, 50));
+    var intersection = segment1.intersect(segment2);
+    assertEquals(0, intersection.length);
+});
+
+test(function () {
+    // line and segment intersecting
+    var segment1 = new G.Segment(new G.Point(-3, -3), new G.Point(0, 0));
+    var segment2 = new G.Segment(new G.Point(-2, 0), new G.Point(-2, 50));
+    var intersection = segment2.asLine().intersect(segment1);
+    assertEquals(new G.Point(-2, -2), intersection[0]);
+});
+
+
+test(function () {
+    // line and segment non-intersecting
+    var segment1 = new G.Segment(new G.Point(-3, -3), new G.Point(0, 0));
+    var segment2 = new G.Segment(new G.Point(-2, 0), new G.Point(-2, 50));
+    var intersection = segment1.asLine().intersect(segment2);
+    assertEquals(0, intersection.length);
+});
+
 G.Circle = function (o, b) {
     this.o = o;
     this.b = b;
     var _obj = null;
 
     this.draw = function (paper) {
-        _obj = paper.circle(this.o.x, this.o.y, this.radius()).attr(attr);
+        _obj = paper.circle(this.o.x, this.o.y, this.radius()).attr(STROKE_ATTR);
         this.o.draw(paper);
         this.b.draw(paper);
     };
@@ -900,26 +951,38 @@ G.Circle = function (o, b) {
     };
 
     this.equals = function (obj) {
-        return false;
+        return obj instanceof G.Circle && this.o.equals(obj.o) && this.radius() == obj.radius();
     };
 };
+
+test(function () {
+    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
+    var circle2 = new G.Circle(new G.Point(1, 1), new G.Point(0, 0));
+    assertEquals(circle1, circle2);
+});
+
+test(function () {
+    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
+    var circle2 = new G.Circle(new G.Point(2, 2), new G.Point(1, 1));
+    assertNotEquals(circle1, circle2);
+});
+
 
 $(function () {
     var geometry = new Geometry("target");
 
-    var horizontal = new G.Segment(new G.Point(500, 500), new G.Point(800, 500));
+    var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
     geometry.addObject(horizontal);
 
-    var point = new G.Point(650, 350);
+    var point = new G.Point(310, 180);
     geometry.addObject(point);
 
-    var testLine1 = new G.Line(259.8076211353316, 150, -204903.8105676658);
-    var testLine2 = new G.Line(-259.8076211353316, 150, 132846.0969082653);
+    var testLine1 = new G.Segment(new G.Point(310, 180), new G.Point(310, 200)).asLine();
 
     geometry.onObjectCreated(watchdog);
 
     geometry.onObjectCreated(function (obj) {
-        if (geometry.testCreated(testLine1) && geometry.testCreated(testLine2)) {
+        if (geometry.testCreated(testLine1)) {
             pr("yay!");
         }
     });
@@ -957,9 +1020,25 @@ if (TESTS_ENABLED) {
     }
 
     function assertEquals(a, b, message) {
-        if (a == b)
+        if (typeof a.equals == "function" && a.equals(b)) {
             return;
-        console.error(message || "assertion failed", "Expected:", a, " got:", b);
+        } else {
+            if (a == b)
+                return;
+        }
+        console.error(message || "assertion failed", "Expected:", a, "got:", b);
+        throw "error";
+    }
+
+
+    function assertNotEquals(a, b, message) {
+        if (typeof a.equals == "function" && !a.equals(b)) {
+            return;
+        } else {
+            if (a != b)
+                return;
+        }
+        console.error(message || "assertion failed", "Expected to be not equal:", a, "and:", b);
         throw "error";
     }
 
