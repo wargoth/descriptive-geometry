@@ -63,45 +63,42 @@ var Geometry = G = function (target) {
 
     var snapWidget = new G.SnapWidget();
 
-    function snapPoint(point) {
-        var snapPoint = null;
-        var nearestDistance = SNAP_THRESHOLD + 1;
-
-        var snapping = $("#snapping input:checked");
-
-        if ($.inArray(snapping.val(), ["endpoint", "all"]) > -1) {
-            $.each(objects, function (key, obj) {
-                function snapToPoint(k, p) {
-                    var distance = p.distance(point);
-                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestDistance = distance;
-                        snapWidget.shape = G.SnapWidget.Endpoint;
-                        snapPoint = p;
-                    }
+    var snapAlgos = {
+        endpoint: function (objects, point, nearestDistance) {
+            var shape = null, snapPoint = null;
+            var snapToPoint = function (k, p) {
+                var distance = p.distance(point);
+                if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                    nearestDistance = distance;
+                    shape = G.SnapWidget.Endpoint;
+                    snapPoint = p;
                 }
+            };
 
+            $.each(objects, function (key, obj) {
                 if (obj instanceof G.Segment) {
                     $.each([obj.a, obj.b], snapToPoint);
                 } else if (obj instanceof G.Point) {
                     snapToPoint(null, obj);
                 }
             });
-        }
-
-        if ($.inArray(snapping.val(), ["center", "all"]) > -1) {
+            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+        },
+        center: function (objects, point, nearestDistance) {
+            var shape = null, snapPoint = null;
             $.each(objects, function (key, obj) {
                 if (obj instanceof G.Circle) {
                     var distance = obj.distance(point);
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestDistance = distance;
-                        snapWidget.shape = G.SnapWidget.Center;
+                        shape = G.SnapWidget.Center;
                         snapPoint = obj.o;
                     }
                 }
             });
-        }
-
-        if ($.inArray(snapping.val(), ["intersection", "all"]) > -1) {
+            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+        },
+        intersection: function (objects, point, nearestDistance) {
+            var shape = null, snapPoint = null;
             var nearestObjects = [];
             $.each(objects, function (key, obj) {
                 if (obj instanceof G.Segment || obj instanceof G.Circle) {
@@ -119,23 +116,42 @@ var Geometry = G = function (target) {
                         var distance = p.distance(point);
                         if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                             nearestDistance = distance;
-                            snapWidget.shape = G.SnapWidget.Intersection;
+                            shape = G.SnapWidget.Intersection;
                             snapPoint = p;
                         }
                     });
                 });
             }
+            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+        }
+    };
+
+    function getSnapped(point) {
+        var snapping = $("#snapping input:checked").val();
+        if (snapping == "none") {
+            return;
         }
 
-        if (snapPoint != null) {
-            snapWidget.show();
-            snapWidget.p = snapPoint;
+        var nearestDistance = SNAP_THRESHOLD + 1;
+        var snapPoint = null;
+        var shape = null;
 
-            point.x = snapPoint.x;
-            point.y = snapPoint.y;
+        var call = function (k, algo) {
+            var result = algo(objects, point, nearestDistance);
+            if (result.snapPoint) {
+                nearestDistance = result.nearestDistance;
+                snapPoint = result.snapPoint;
+                shape = result.shape;
+            }
+        };
+
+        if (snapping == "all") {
+            $.each(snapAlgos, call);
         } else {
-            snapWidget.hide();
+            call(0, snapAlgos[snapping])
         }
+
+        return snapPoint != null ? {snapPoint: snapPoint, shape: shape} : null;
     }
 
     $(this.paper.canvas).mousemove(function (e) {
@@ -144,7 +160,17 @@ var Geometry = G = function (target) {
         cursorP.x = e.pageX - position.left;
         cursorP.y = e.pageY - position.top;
 
-        snapPoint(cursorP);
+        var snapped = getSnapped(cursorP);
+        if (snapped) {
+            snapWidget.p = snapped.snapPoint;
+            snapWidget.shape = snapped.shape;
+            snapWidget.show();
+
+            cursorP.x = snapped.snapPoint.x;
+            cursorP.y = snapped.snapPoint.y;
+        } else {
+            snapWidget.hide();
+        }
         snapWidget.redraw(paper);
 
         if (currentObject != null) {
@@ -219,6 +245,7 @@ G.SnapWidget = function (p) {
 
     var _state = [];
     var _visible = false;
+    var _lastShape = null;
 
     this.draw = function (paper) {
         this.shape.draw(paper, this, _state);
@@ -249,7 +276,10 @@ G.SnapWidget = function (p) {
     };
 
     this.show = function () {
+        if (this.shape != _lastShape)
+            this.hide();
         _visible = true;
+        _lastShape = this.shape;
         this.shape.show(_state);
     };
 };
@@ -308,8 +338,8 @@ G.SnapWidget.Center = {
             this.draw(paper, widget, state);
         }
         state[this.name]._obj.attr({
-            x: widget.p.x,
-            y: widget.p.y
+            cx: widget.p.x,
+            cy: widget.p.y
         });
     },
     destroy: function (state) {
@@ -319,13 +349,11 @@ G.SnapWidget.Center = {
         }
     },
     hide: function (state) {
-        log("hide");
         if (state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.hide();
         }
     },
     show: function (state) {
-        log("show");
         if (state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.show();
         }
