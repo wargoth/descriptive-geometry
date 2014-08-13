@@ -7,8 +7,6 @@ var TESTS_ENABLED = true;
 
 var $ = jQuery;
 
-var tests = [];
-
 var Geometry = G = function (target) {
     var self = this;
     target = target || "target";
@@ -86,6 +84,19 @@ var Geometry = G = function (target) {
                     $.each([obj.a, obj.b], snapToPoint);
                 } else if (obj instanceof G.Point) {
                     snapToPoint(null, obj);
+                }
+            });
+        }
+
+        if ($.inArray(snapping.val(), ["center", "all"]) > -1) {
+            $.each(objects, function (key, obj) {
+                if (obj instanceof G.Circle) {
+                    var distance = obj.distance(point);
+                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                        nearestDistance = distance;
+                        snapWidget.shape = G.SnapWidget.Center;
+                        snapPoint = obj.o;
+                    }
                 }
             });
         }
@@ -218,7 +229,10 @@ G.SnapWidget = function (p) {
     };
 
     this.destroy = function () {
-        $.each(G.SnapWidget.AllShapes, function (k, shape) {
+        $.each(G.SnapWidget, function (k, shape) {
+            if (typeof  shape == "function")
+                return;
+
             shape.destroy(_state);
         });
         _state = null;
@@ -226,7 +240,10 @@ G.SnapWidget = function (p) {
 
     this.hide = function () {
         _visible = false;
-        $.each(G.SnapWidget.AllShapes, function (k, shape) {
+        $.each(G.SnapWidget, function (k, shape) {
+            if (typeof  shape == "function")
+                return;
+
             shape.hide(_state);
         });
     };
@@ -270,6 +287,45 @@ G.SnapWidget.Endpoint = {
         }
     },
     show: function (state) {
+        if (state[this.name] && state[this.name]._obj) {
+            state[this.name]._obj.show();
+        }
+    }
+};
+
+G.SnapWidget.Center = {
+    name: "Center",
+    draw: function (paper, widget, state) {
+        state[this.name] = {};
+        state[this.name]._obj = paper.circle(widget.p.x, widget.p.y, SNAP_WIDGET_SIZE / 2)
+            .attr({stroke: "red", "stroke-width": 2});
+    },
+    redraw: function (paper, widget, state, visible) {
+        if (!visible)
+            return;
+
+        if (!state[this.name] || !state[this.name]._obj) {
+            this.draw(paper, widget, state);
+        }
+        state[this.name]._obj.attr({
+            x: widget.p.x,
+            y: widget.p.y
+        });
+    },
+    destroy: function (state) {
+        if (state[this.name] && state[this.name]._obj) {
+            state[this.name]._obj.remove();
+            state[this.name]._obj = null;
+        }
+    },
+    hide: function (state) {
+        log("hide");
+        if (state[this.name] && state[this.name]._obj) {
+            state[this.name]._obj.hide();
+        }
+    },
+    show: function (state) {
+        log("show");
         if (state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.show();
         }
@@ -321,8 +377,6 @@ G.SnapWidget.Intersection = {
         }
     }
 };
-
-G.SnapWidget.AllShapes = [G.SnapWidget.Endpoint, G.SnapWidget.Intersection];
 
 G.Point = function () {
     if (arguments.length > 0 && arguments[0] instanceof G.Point) {
@@ -990,7 +1044,8 @@ function test(func) {
     if (!TESTS_ENABLED) {
         return;
     }
-    tests.push(func);
+    window.tests = window.tests || [];
+    window.tests.push(func);
 }
 
 if (TESTS_ENABLED) {
