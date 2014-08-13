@@ -82,20 +82,24 @@ var Geometry = G = function (target) {
                     snapToPoint(null, obj);
                 }
             });
-            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
         },
         center: function (objects, point, nearestDistance) {
+            if (nearestDistance < SNAP_THRESHOLD + 1) {
+                return; // previous snap points have priority over this snap point TODO refactor?
+            }
             var shape = null, snapPoint = null;
             $.each(objects, function (key, obj) {
                 if (obj instanceof G.Circle) {
                     var distance = obj.distance(point);
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                        nearestDistance = distance;
                         shape = G.SnapWidget.Center;
                         snapPoint = obj.o;
                     }
                 }
             });
-            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
         },
         intersection: function (objects, point, nearestDistance) {
             var shape = null, snapPoint = null;
@@ -122,7 +126,7 @@ var Geometry = G = function (target) {
                     });
                 });
             }
-            return {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance};
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
         }
     };
 
@@ -138,7 +142,7 @@ var Geometry = G = function (target) {
 
         var call = function (k, algo) {
             var result = algo(objects, point, nearestDistance);
-            if (result.snapPoint) {
+            if (result) {
                 nearestDistance = result.nearestDistance;
                 snapPoint = result.snapPoint;
                 shape = result.shape;
@@ -146,7 +150,7 @@ var Geometry = G = function (target) {
         };
 
         if (snapping == "all") {
-            $.each(snapAlgos, call);
+            $.each([snapAlgos.endpoint, snapAlgos.intersection, snapAlgos.center], call); // TODO refactor: get rid of explicit enumeration
         } else {
             call(0, snapAlgos[snapping])
         }
