@@ -35,14 +35,33 @@
 
 <fieldset id="snapping">
     <legend>Snapping</legend>
-    <label><input type="radio" name="snapping" value="all" checked/> All</label>
-    <label><input type="radio" name="snapping" value="endpoint"/> Endpoints</label>
-    <label><input type="radio" name="snapping" value="intersection"/> Intersections</label>
-    <label><input type="radio" name="snapping" value="center"/> Center</label>
-    <label><input type="radio" name="snapping" value="none"/> None</label>
+    <label><input type="checkbox" name="snapping[]" value="endpoint"/> Endpoints</label>
+    <label><input type="checkbox" name="snapping[]" value="intersection"/> Intersections</label>
+    <label><input type="checkbox" name="snapping[]" value="center"/> Center</label>
 </fieldset>
 
 <div id="target"></div>
 
 </body>
+<script type="text/javascript">
+    $(function () {
+        var geometry = new Geometry("target");
+
+        var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
+        geometry.addObject(horizontal);
+
+        var point = new G.Point(310, 180);
+        geometry.addObject(point);
+
+        var testLine1 = new G.Segment(new G.Point(310, 180), new G.Point(310, 200)).asLine();
+
+        geometry.onObjectCreated(watchdog);
+
+        geometry.onObjectCreated(function (obj) {
+            if (geometry.testCreated(testLine1)) {
+                pr("yay!");
+            }
+        });
+    });
+</script>
 </html>

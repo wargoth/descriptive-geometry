@@ -1,5 +1,5 @@
 var SNAP_THRESHOLD = 10;
-var KEYCODE_ESC = 27
+var KEYCODE_ESC = 27;
 var POINT_SIZE = 2;
 var SNAP_WIDGET_SIZE = 15;
 var STROKE_ATTR = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
@@ -131,29 +131,30 @@ var Geometry = G = function (target) {
     };
 
     function getSnapped(point) {
-        var snapping = $("#snapping input:checked").val();
-        if (snapping == "none") {
+        var snapping = $("#snapping input:checked").map(function () {
+            return $(this).val();
+        }).get();
+        if (snapping.length == 0) {
             return;
         }
+
+        // circle snapping is aggressive, has to be last in the list
+        snapping.sort(function (a, b) {
+            return  a == "circle" ? 1 : 0;
+        });
 
         var nearestDistance = SNAP_THRESHOLD + 1;
         var snapPoint = null;
         var shape = null;
 
-        var call = function (k, algo) {
-            var result = algo(objects, point, nearestDistance);
+        $.each(snapping, function (k, name) {
+            var result = snapAlgos[name](objects, point, nearestDistance);
             if (result) {
                 nearestDistance = result.nearestDistance;
                 snapPoint = result.snapPoint;
                 shape = result.shape;
             }
-        };
-
-        if (snapping == "all") {
-            $.each([snapAlgos.endpoint, snapAlgos.intersection, snapAlgos.center], call); // TODO refactor: get rid of explicit enumeration
-        } else {
-            call(0, snapAlgos[snapping])
-        }
+        });
 
         return snapPoint != null ? {snapPoint: snapPoint, shape: shape} : null;
     }
@@ -451,8 +452,9 @@ G.Point = function () {
 /**
  * Constructs a new Line object. Line defined as general form Ax + By + C = 0
  *
- * @param slope optional
- * @param yIntercept optional
+ * @param a
+ * @param b
+ * @param c
  * @constructor
  */
 G.Line = function (a, b, c) {
@@ -590,7 +592,6 @@ G.Line = function (a, b, c) {
 
     this._solveForVertical = function (circ) {
         var a = this.a;
-        var b = this.b;
         var c = this.c;
         var a1 = circ.o.x;
         var b1 = circ.o.y;
@@ -1033,27 +1034,6 @@ test(function () {
     var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
     var circle2 = new G.Circle(new G.Point(2, 2), new G.Point(1, 1));
     assertNotEquals(circle1, circle2);
-});
-
-
-$(function () {
-    var geometry = new Geometry("target");
-
-    var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
-    geometry.addObject(horizontal);
-
-    var point = new G.Point(310, 180);
-    geometry.addObject(point);
-
-    var testLine1 = new G.Segment(new G.Point(310, 180), new G.Point(310, 200)).asLine();
-
-    geometry.onObjectCreated(watchdog);
-
-    geometry.onObjectCreated(function (obj) {
-        if (geometry.testCreated(testLine1)) {
-            pr("yay!");
-        }
-    });
 });
 
 function pr(obj) {
