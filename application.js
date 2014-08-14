@@ -64,69 +64,77 @@ var Geometry = G = function (target) {
     var snapWidget = new G.SnapWidget();
 
     var snapAlgos = {
-        endpoint: function (objects, point, nearestDistance) {
-            var shape = null, snapPoint = null;
-            var snapToPoint = function (k, p) {
-                var distance = p.distance(point);
-                if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                    nearestDistance = distance;
-                    shape = G.SnapWidget.Endpoint;
-                    snapPoint = p;
-                }
-            };
-
-            $.each(objects, function (key, obj) {
-                if (obj instanceof G.Segment) {
-                    $.each([obj.a, obj.b], snapToPoint);
-                } else if (obj instanceof G.Point) {
-                    snapToPoint(null, obj);
-                }
-            });
-            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
-        },
-        center: function (objects, point, nearestDistance) {
-            if (nearestDistance < SNAP_THRESHOLD + 1) {
-                return; // previous snap points have priority over this snap point TODO refactor?
-            }
-            var shape = null, snapPoint = null;
-            $.each(objects, function (key, obj) {
-                if (obj instanceof G.Circle) {
-                    var distance = obj.distance(point);
+        endpoint: {
+            priority: 1,
+            calc: function (objects, point, nearestDistance) {
+                var shape = null, snapPoint = null;
+                var snapToPoint = function (k, p) {
+                    var distance = p.distance(point);
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                         nearestDistance = distance;
-                        shape = G.SnapWidget.Center;
-                        snapPoint = obj.o;
+                        shape = G.SnapWidget.Endpoint;
+                        snapPoint = p;
                     }
-                }
-            });
-            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+                };
+
+                $.each(objects, function (key, obj) {
+                    if (obj instanceof G.Segment) {
+                        $.each([obj.a, obj.b], snapToPoint);
+                    } else if (obj instanceof G.Point) {
+                        snapToPoint(null, obj);
+                    }
+                });
+                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+            }
         },
-        intersection: function (objects, point, nearestDistance) {
-            var shape = null, snapPoint = null;
-            var nearestObjects = [];
-            $.each(objects, function (key, obj) {
-                if (obj instanceof G.Segment || obj instanceof G.Circle) {
-                    var distance = obj.distance(point);
-                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestObjects.push(obj);
-                    }
+        center: {
+            priority: 10,
+            calc: function (objects, point, nearestDistance) {
+                if (nearestDistance < SNAP_THRESHOLD + 1) {
+                    return; // previous snap points have priority over this snap point TODO refactor?
                 }
-            });
-            while (nearestObjects.length > 1) {
-                var one = nearestObjects.pop();
-                $.each(nearestObjects, function (key, two) {
-                    var ps = two.intersect(one);
-                    $.each(ps, function (k, p) {
-                        var distance = p.distance(point);
+                var shape = null, snapPoint = null;
+                $.each(objects, function (key, obj) {
+                    if (obj instanceof G.Circle) {
+                        var distance = obj.distance(point);
                         if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                             nearestDistance = distance;
-                            shape = G.SnapWidget.Intersection;
-                            snapPoint = p;
+                            shape = G.SnapWidget.Center;
+                            snapPoint = obj.o;
                         }
-                    });
+                    }
                 });
+                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+            }},
+        intersection: {
+            priority: 1,
+            calc: function (objects, point, nearestDistance) {
+                var shape = null, snapPoint = null;
+                var nearestObjects = [];
+                $.each(objects, function (key, obj) {
+                    if (obj instanceof G.Segment || obj instanceof G.Circle) {
+                        var distance = obj.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestObjects.push(obj);
+                        }
+                    }
+                });
+                while (nearestObjects.length > 1) {
+                    var one = nearestObjects.pop();
+                    $.each(nearestObjects, function (key, two) {
+                        var ps = two.intersect(one);
+                        $.each(ps, function (k, p) {
+                            var distance = p.distance(point);
+                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                                nearestDistance = distance;
+                                shape = G.SnapWidget.Intersection;
+                                snapPoint = p;
+                            }
+                        });
+                    });
+                }
+                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
             }
-            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
         }
     };
 
@@ -137,10 +145,11 @@ var Geometry = G = function (target) {
         if (snapping.length == 0) {
             return;
         }
+        snapping = ["center", "endpoint", "intersection"];
 
         // circle snapping is aggressive, has to be last in the list
         snapping.sort(function (a, b) {
-            return  a == "circle" ? 1 : 0;
+            return  snapAlgos[a].priority - snapAlgos[b].priority;
         });
 
         var nearestDistance = SNAP_THRESHOLD + 1;
@@ -148,7 +157,7 @@ var Geometry = G = function (target) {
         var shape = null;
 
         $.each(snapping, function (k, name) {
-            var result = snapAlgos[name](objects, point, nearestDistance);
+            var result = snapAlgos[name].calc(objects, point, nearestDistance);
             if (result) {
                 nearestDistance = result.nearestDistance;
                 snapPoint = result.snapPoint;
