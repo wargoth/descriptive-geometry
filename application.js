@@ -7,6 +7,11 @@ var TESTS_ENABLED = true;
 
 var $ = jQuery;
 
+var assignId = function () {
+    window.pointIds = window.pointIds || "A".charCodeAt(0);
+    return String.fromCharCode(window.pointIds++);
+};
+
 var Geometry = G = function (target) {
     var self = this;
     target = target || "target";
@@ -29,6 +34,7 @@ var Geometry = G = function (target) {
     $(this.paper.canvas).click(function (e) {
         if (currentObject == null) {
             var pointA = new G.Point(cursorP);
+            pointA.t = assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
             switch (activeControl.val()) {
@@ -43,7 +49,7 @@ var Geometry = G = function (target) {
                     currentObject = circle;
                     break;
                 case "point":
-                    var point = new G.Point(pointA);
+                    var point = pointA;
                     point.draw(paper);
                     objects.push(point);
                     self.objectCreatedCallbacks.notify(point);
@@ -53,6 +59,7 @@ var Geometry = G = function (target) {
             snapWidget.hide();
 
             currentObject.b = new G.Point(cursorP);
+            currentObject.b.t = assignId();
             currentObject.redraw(paper);
             objects.push(currentObject);
             self.objectCreatedCallbacks.notify(currentObject);
@@ -431,17 +438,27 @@ G.Point = function () {
         this.x = 0;
         this.y = 0;
     }
+    this.t = null;
     var _obj = null;
 
     this.draw = function (paper) {
-        _obj = paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR).attr({fill: STROKE_ATTR.stroke});
+        _obj = paper.set();
+        _obj.push(paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR).attr({fill: STROKE_ATTR.stroke}));
+        if (this.t)
+            _obj.push(paper.text(this.x - 10, this.y - 15, this.t).attr({"font-size": 16}));
     };
 
     this.redraw = function (paper) {
         if (_obj == null) {
             this.draw(paper);
         }
-        _obj.attr({cx: this.x, cy: this.y});
+        _obj.attr({
+            cx: this.x,
+            cy: this.y,
+            x: this.x - 10,
+            y: this.y - 15,
+            text: this.t
+        });
     };
 
     this.destroy = function () {
