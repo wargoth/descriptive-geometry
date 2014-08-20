@@ -1,8 +1,8 @@
 var SNAP_THRESHOLD = 10;
 var KEYCODE_ESC = 27;
-var POINT_SIZE = 4;
+var POINT_SIZE = 3;
 var SNAP_WIDGET_SIZE = 15;
-var STROKE_ATTR = {stroke: "blue", "stroke-width": 4, "stroke-linecap": "round"};
+var STROKE_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
 var TESTS_ENABLED = true;
 
 var $ = jQuery;
@@ -1007,7 +1007,7 @@ G.PlanarRenderer.V.prototype.drawPoint = function (point) {
         point[CACHE] = {};
         point[CACHE]._obj = paper.set();
         point[CACHE]._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(STROKE_ATTR));
-        point[CACHE]._obj.push(paper.circle(point.x, point.y, STROKE_ATTR["stroke-width"]).attr({fill: "white"}));
+        point[CACHE]._obj.push(paper.circle(point.x, point.y, STROKE_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
         if (point.t)
             point[CACHE]._obj.push(paper.text(point.x - 10, point.y - 15, point.t).attr({"font-size": 16}));
 
