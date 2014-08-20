@@ -1,8 +1,8 @@
 var SNAP_THRESHOLD = 10;
 var KEYCODE_ESC = 27;
-var POINT_SIZE = 2;
+var POINT_SIZE = 4;
 var SNAP_WIDGET_SIZE = 15;
-var STROKE_ATTR = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
+var STROKE_ATTR = {stroke: "blue", "stroke-width": 4, "stroke-linecap": "round"};
 var TESTS_ENABLED = true;
 
 var $ = jQuery;
@@ -152,7 +152,6 @@ var Geometry = G = function (target) {
         if (snapping.length == 0) {
             return;
         }
-        snapping = ["center", "endpoint", "intersection"];
 
         // circle snapping is aggressive, has to be last in the list
         snapping.sort(function (a, b) {
@@ -160,19 +159,16 @@ var Geometry = G = function (target) {
         });
 
         var nearestDistance = SNAP_THRESHOLD + 1;
-        var snapPoint = null;
-        var shape = null;
+        var bestResult = null;
 
         $.each(snapping, function (k, name) {
             var result = snapAlgos[name].calc(objects, point, nearestDistance);
             if (result) {
+                bestResult = result;
                 nearestDistance = result.nearestDistance;
-                snapPoint = result.snapPoint;
-                shape = result.shape;
             }
         });
-
-        return snapPoint != null ? {snapPoint: snapPoint, shape: shape} : null;
+        return bestResult;
     }
 
     $(this.paper.canvas).mousemove(function (e) {
@@ -443,7 +439,8 @@ G.Point = function () {
 
     this.draw = function (paper) {
         _obj = paper.set();
-        _obj.push(paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR).attr({fill: STROKE_ATTR.stroke}));
+        _obj.push(paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR));
+        _obj.push(paper.circle(this.x, this.y, STROKE_ATTR["stroke-width"]).attr({fill: "white"}));
         if (this.t)
             _obj.push(paper.text(this.x - 10, this.y - 15, this.t).attr({"font-size": 16}));
     };
