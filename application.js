@@ -120,14 +120,14 @@ G.prototype.addRenderer = function (renderer) {
         if (snapped) {
             snapWidget.p = snapped.snapPoint;
             snapWidget.shape = snapped.shape;
-            snapWidget.show();
+            snapWidget.show(renderer.paper);
 
             cursorP.x = snapped.snapPoint.x;
             cursorP.y = snapped.snapPoint.y;
         } else {
-            snapWidget.hide();
+            snapWidget.hide(renderer.paper);
         }
-        renderers.draw(snapWidget);
+        renderer.draw(snapWidget);
 
         if (self.currentObject != null) {
             self.currentObject.b = cursorP;
@@ -160,7 +160,7 @@ G.prototype.addRenderer = function (renderer) {
                     break;
             }
         } else {
-            snapWidget.hide();
+            snapWidget.hide(renderer.paper);
 
             self.currentObject.b = new G.Point(cursorP);
             self.currentObject.b.t = assignId();
@@ -182,7 +182,7 @@ G.SnapAlgos = {
                 var distance = p.distance(point);
                 if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                     nearestDistance = distance;
-                    shape = G.SnapWidget.Endpoint;
+                    shape = G.SnapWidget.Shape.Endpoint;
                     snapPoint = p;
                 }
             };
@@ -209,7 +209,7 @@ G.SnapAlgos = {
                     var distance = obj.distance(point);
                     if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                         nearestDistance = distance;
-                        shape = G.SnapWidget.Center;
+                        shape = G.SnapWidget.Shape.Center;
                         snapPoint = obj.o;
                     }
                 }
@@ -237,7 +237,7 @@ G.SnapAlgos = {
                         var distance = p.distance(point);
                         if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
                             nearestDistance = distance;
-                            shape = G.SnapWidget.Intersection;
+                            shape = G.SnapWidget.Shape.Intersection;
                             snapPoint = p;
                         }
                     });
@@ -270,65 +270,63 @@ test(function () {
 });
 
 G.SnapWidget = function (p) {
-    this.p = p || null;
-    this.shape = G.SnapWidget.Endpoint;
+    var referenceId = G.SnapWidget._id = G.SnapWidget._id++ || 1;
+    var stateName = "_snapshotWidgetState-" + referenceId;
 
-    var _state = [];
+    this.p = p || null;
+    this.shape = G.SnapWidget.Shape.Endpoint;
+
     var _visible = false;
     var _lastShape = null;
 
     this.draw = function (paper) {
-        this.shape.draw(paper, this, _state);
+        if (!paper[stateName]) {
+            paper[stateName] = [];
+        }
+        this.shape.draw(paper, this, paper[stateName], _visible);
     };
 
-    this.redraw = function (paper) {
-        this.shape.redraw(paper, this, _state, _visible);
-    };
-
-    this.destroy = function () {
+    this.destroy = function (paper) {
         $.each(G.SnapWidget, function (k, shape) {
-            if (typeof  shape == "function")
+            if (typeof shape != "object")
                 return;
-
-            shape.destroy(_state);
+            shape.destroy(paper[stateName]);
         });
-        _state = null;
+        delete paper[stateName];
     };
 
-    this.hide = function () {
+    this.hide = function (paper) {
         _visible = false;
-        $.each(G.SnapWidget, function (k, shape) {
-            if (typeof  shape == "function")
-                return;
-
-            shape.hide(_state);
+        $.each(G.SnapWidget.Shape, function (k, shape) {
+            shape.hide(paper[stateName]);
         });
     };
 
-    this.show = function () {
+    this.show = function (paper) {
         if (this.shape != _lastShape)
-            this.hide();
+            this.hide(paper);
         _visible = true;
         _lastShape = this.shape;
-        this.shape.show(_state);
+        this.shape.show(paper[stateName]);
     };
 };
 
-G.SnapWidget.Endpoint = {
+G.SnapWidget.Shape = {};
+G.SnapWidget.Shape.Endpoint = {
     name: "Endpoint",
-    draw: function (paper, widget, state) {
+    _draw: function (paper, widget, state) {
         var left = widget.p.x - SNAP_WIDGET_SIZE / 2;
         var top = widget.p.y - SNAP_WIDGET_SIZE / 2;
         state[this.name] = {};
         state[this.name]._obj = paper.rect(left, top, SNAP_WIDGET_SIZE, SNAP_WIDGET_SIZE)
             .attr({stroke: "red", "stroke-width": 2});
     },
-    redraw: function (paper, widget, state, visible) {
+    draw: function (paper, widget, state, visible) {
         if (!visible)
             return;
 
         if (!state[this.name] || !state[this.name]._obj) {
-            this.draw(paper, widget, state);
+            this._draw(paper, widget, state);
         }
         state[this.name]._obj.attr({
             x: widget.p.x - SNAP_WIDGET_SIZE / 2,
@@ -336,36 +334,36 @@ G.SnapWidget.Endpoint = {
         });
     },
     destroy: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.remove();
-            state[this.name]._obj = null;
+            delete state[this.name];
         }
     },
     hide: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.hide();
         }
     },
     show: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.show();
         }
     }
 };
 
-G.SnapWidget.Center = {
+G.SnapWidget.Shape.Center = {
     name: "Center",
-    draw: function (paper, widget, state) {
+    _draw: function (paper, widget, state) {
         state[this.name] = {};
         state[this.name]._obj = paper.circle(widget.p.x, widget.p.y, SNAP_WIDGET_SIZE / 2)
             .attr({stroke: "red", "stroke-width": 2});
     },
-    redraw: function (paper, widget, state, visible) {
+    draw: function (paper, widget, state, visible) {
         if (!visible)
             return;
 
         if (!state[this.name] || !state[this.name]._obj) {
-            this.draw(paper, widget, state);
+            this._draw(paper, widget, state);
         }
         state[this.name]._obj.attr({
             cx: widget.p.x,
@@ -373,26 +371,26 @@ G.SnapWidget.Center = {
         });
     },
     destroy: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.remove();
-            state[this.name]._obj = null;
+            delete state[this.name];
         }
     },
     hide: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.hide();
         }
     },
     show: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.show();
         }
     }
 };
 
-G.SnapWidget.Intersection = {
+G.SnapWidget.Shape.Intersection = {
     name: "Intersection",
-    draw: function (paper, widget, state) {
+    _draw: function (paper, widget, state) {
         var path = [
             ["M", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
             ["L", widget.p.x + SNAP_WIDGET_SIZE / 2, widget.p.y + SNAP_WIDGET_SIZE / 2 ],
@@ -403,12 +401,12 @@ G.SnapWidget.Intersection = {
         state[this.name]._obj = paper.path(path)
             .attr({stroke: "red", "stroke-width": 2});
     },
-    redraw: function (paper, widget, state, visible) {
+    draw: function (paper, widget, state, visible) {
         if (!visible)
             return;
 
         if (!state[this.name] || !state[this.name]._obj) {
-            this.draw(paper, widget, state);
+            this._draw(paper, widget, state);
         }
         var path = [
             ["M", widget.p.x - SNAP_WIDGET_SIZE / 2, widget.p.y - SNAP_WIDGET_SIZE / 2],
@@ -419,18 +417,18 @@ G.SnapWidget.Intersection = {
         state[this.name]._obj.attr({path: path});
     },
     destroy: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.remove();
-            state[this.name]._obj = null;
+            delete state[this.name];
         }
     },
     hide: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.hide();
         }
     },
     show: function (state) {
-        if (state[this.name] && state[this.name]._obj) {
+        if (state && state[this.name] && state[this.name]._obj) {
             state[this.name]._obj.show();
         }
     }
@@ -966,10 +964,14 @@ G.PlanarRenderer.V = function (target) {
     } else {
         this.paper = target;
     }
+    this.cache = G.PlanarRenderer.V.getNewId();
 };
-G.PlanarRenderer.V.CACHE = "_G.PlanarRenderer.V.draw";
+G.PlanarRenderer.V.getNewId = function () {
+    G.PlanarRenderer.V._id = G.PlanarRenderer.V._id || 1;
+    return "_G.PlanarRenderer.V.draw_" + G.PlanarRenderer.V._id++;
+};
 G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
-    var CACHE = G.PlanarRenderer.V.CACHE;
+    var CACHE = this.cache;
     var paper = this.paper;
 
     if (!segment[CACHE]) {
@@ -1000,7 +1002,7 @@ G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
     }
 };
 G.PlanarRenderer.V.prototype.drawPoint = function (point) {
-    var CACHE = G.PlanarRenderer.V.CACHE;
+    var CACHE = this.cache;
     var paper = this.paper;
 
     if (!point[CACHE]) {
@@ -1027,7 +1029,7 @@ G.PlanarRenderer.V.prototype.drawPoint = function (point) {
     }
 };
 G.PlanarRenderer.V.prototype.drawCircle = function (circle) {
-    var CACHE = G.PlanarRenderer.V.CACHE;
+    var CACHE = this.cache;
     var paper = this.paper;
 
     if (!circle[CACHE]) {
@@ -1052,7 +1054,7 @@ G.PlanarRenderer.V.prototype.drawLine = function (line) {
         return; // uninitialized
     }
 
-    var CACHE = G.PlanarRenderer.V.CACHE;
+    var CACHE = this.cache;
     var paper = this.paper;
 
     if (!line[CACHE]) {
@@ -1107,7 +1109,7 @@ G.PlanarRenderer.V.prototype.draw = function (obj) {
         this.drawLine(obj);
     }
     if (obj instanceof G.SnapWidget) {
-        obj.redraw(this.paper)
+        obj.draw(this.paper)
     }
 };
 
