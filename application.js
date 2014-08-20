@@ -12,13 +12,17 @@ var assignId = function () {
     return String.fromCharCode(window.pointIds++);
 };
 
-var Geometry = G = function (target) {
+var Geometry = G = function () {
     var self = this;
-    target = target || "target";
 
-    var paper = this.paper = Raphael(target);
+    this.renderers = [];
+    this.renderers.draw = function (obj) {
+        $.each(this, function (k, renderer) {
+            renderer.draw(obj);
+        });
+    };
 
-    var objects = this.objects = [];
+    this.objects = [];
 
     this.objectCreatedCallbacks = [];
     this.objectCreatedCallbacks.notify = function (obj) {
@@ -27,179 +31,16 @@ var Geometry = G = function (target) {
         });
     };
 
-    var currentObject = null;
+    this.currentObject = null;
 
-    var cursorP = new G.Point();
+    this.cursorP = new G.Point();
 
-    $(this.paper.canvas).click(function (e) {
-        if (currentObject == null) {
-            var pointA = new G.Point(cursorP);
-            pointA.t = assignId();
-
-            var activeControl = $("#controls input[name=tool]:checked");
-            switch (activeControl.val()) {
-                case "segment":
-                    var segment = new G.Segment(pointA, cursorP);
-                    segment.draw(paper);
-                    currentObject = segment;
-                    break;
-                case "circle":
-                    var circle = new G.Circle(pointA, cursorP);
-                    circle.draw(paper);
-                    currentObject = circle;
-                    break;
-                case "point":
-                    var point = pointA;
-                    point.draw(paper);
-                    objects.push(point);
-                    self.objectCreatedCallbacks.notify(point);
-                    break;
-            }
-        } else {
-            snapWidget.hide();
-
-            currentObject.b = new G.Point(cursorP);
-            currentObject.b.t = assignId();
-            currentObject.redraw(paper);
-            objects.push(currentObject);
-            self.objectCreatedCallbacks.notify(currentObject);
-
-            currentObject = null;
-        }
-    });
-
-    var snapWidget = new G.SnapWidget();
-
-    var snapAlgos = {
-        endpoint: {
-            priority: 1,
-            calc: function (objects, point, nearestDistance) {
-                var shape = null, snapPoint = null;
-                var snapToPoint = function (k, p) {
-                    var distance = p.distance(point);
-                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                        nearestDistance = distance;
-                        shape = G.SnapWidget.Endpoint;
-                        snapPoint = p;
-                    }
-                };
-
-                $.each(objects, function (key, obj) {
-                    if (obj instanceof G.Segment) {
-                        $.each([obj.a, obj.b], snapToPoint);
-                    } else if (obj instanceof G.Point) {
-                        snapToPoint(null, obj);
-                    }
-                });
-                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
-            }
-        },
-        center: {
-            priority: 10,
-            calc: function (objects, point, nearestDistance) {
-                if (nearestDistance < SNAP_THRESHOLD + 1) {
-                    return; // previous snap points have priority over this snap point TODO refactor?
-                }
-                var shape = null, snapPoint = null;
-                $.each(objects, function (key, obj) {
-                    if (obj instanceof G.Circle) {
-                        var distance = obj.distance(point);
-                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                            nearestDistance = distance;
-                            shape = G.SnapWidget.Center;
-                            snapPoint = obj.o;
-                        }
-                    }
-                });
-                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
-            }},
-        intersection: {
-            priority: 1,
-            calc: function (objects, point, nearestDistance) {
-                var shape = null, snapPoint = null;
-                var nearestObjects = [];
-                $.each(objects, function (key, obj) {
-                    if (obj instanceof G.Segment || obj instanceof G.Circle) {
-                        var distance = obj.distance(point);
-                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                            nearestObjects.push(obj);
-                        }
-                    }
-                });
-                while (nearestObjects.length > 1) {
-                    var one = nearestObjects.pop();
-                    $.each(nearestObjects, function (key, two) {
-                        var ps = two.intersect(one);
-                        $.each(ps, function (k, p) {
-                            var distance = p.distance(point);
-                            if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
-                                nearestDistance = distance;
-                                shape = G.SnapWidget.Intersection;
-                                snapPoint = p;
-                            }
-                        });
-                    });
-                }
-                return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
-            }
-        }
-    };
-
-    function getSnapped(point) {
-        var snapping = $("#snapping input:checked").map(function () {
-            return $(this).val();
-        }).get();
-        if (snapping.length == 0) {
-            return;
-        }
-
-        // circle snapping is aggressive, has to be last in the list
-        snapping.sort(function (a, b) {
-            return  snapAlgos[a].priority - snapAlgos[b].priority;
-        });
-
-        var nearestDistance = SNAP_THRESHOLD + 1;
-        var bestResult = null;
-
-        $.each(snapping, function (k, name) {
-            var result = snapAlgos[name].calc(objects, point, nearestDistance);
-            if (result) {
-                bestResult = result;
-                nearestDistance = result.nearestDistance;
-            }
-        });
-        return bestResult;
-    }
-
-    $(this.paper.canvas).mousemove(function (e) {
-        var $this = $(this);
-        var position = $this.position();
-        cursorP.x = e.pageX - position.left;
-        cursorP.y = e.pageY - position.top;
-
-        var snapped = getSnapped(cursorP);
-        if (snapped) {
-            snapWidget.p = snapped.snapPoint;
-            snapWidget.shape = snapped.shape;
-            snapWidget.show();
-
-            cursorP.x = snapped.snapPoint.x;
-            cursorP.y = snapped.snapPoint.y;
-        } else {
-            snapWidget.hide();
-        }
-        snapWidget.redraw(paper);
-
-        if (currentObject != null) {
-            currentObject.b = cursorP;
-            currentObject.redraw(paper);
-        }
-    });
+    this.snapWidget = new G.SnapWidget();
 
     $("#controls input:radio").click(function () {
-        if (currentObject != null) {
-            currentObject.destroy();
-            currentObject = null;
+        if (self.currentObject != null) {
+            self.currentObject.destroy();
+            self.currentObject = null;
         }
     });
 
@@ -207,9 +48,9 @@ var Geometry = G = function (target) {
         e = e || window.event;
         var keyCode = e.keyCode || e.which;
         if (keyCode == KEYCODE_ESC) {
-            if (currentObject != null) {
-                currentObject.destroy();
-                currentObject = null;
+            if (self.currentObject != null) {
+                self.currentObject.destroy();
+                self.currentObject = null;
             }
         }
     });
@@ -221,7 +62,7 @@ G.prototype.onObjectCreated = function (callback) {
 
 G.prototype.addObject = function (obj) {
     this.objects.push(obj);
-    obj.draw(this.paper);
+    this.renderers.draw(obj);
 };
 
 G.prototype.testCreated = function (obj) {
@@ -233,6 +74,178 @@ G.prototype.testCreated = function (obj) {
         }
     });
     return ret;
+};
+
+G.prototype.addRenderer = function (renderer) {
+    var self = this;
+    var renderers = this.renderers;
+    var cursorP = this.cursorP;
+    var snapWidget = this.snapWidget;
+
+    renderers.push(renderer);
+
+    var getSnapPoint = function (point) {
+        var snapping = $("#snapping input:checked").map(function () {
+            return $(this).val();
+        }).get();
+        if (snapping.length == 0) {
+            return;
+        }
+
+        // circle snapping is aggressive, has to be last in the list
+        snapping.sort(function (a, b) {
+            return G.SnapAlgos[a].priority - G.SnapAlgos[b].priority;
+        });
+
+        var nearestDistance = SNAP_THRESHOLD + 1;
+        var bestResult = null;
+
+        $.each(snapping, function (k, name) {
+            var result = G.SnapAlgos[name].calc(self.objects, point, nearestDistance);
+            if (result) {
+                bestResult = result;
+                nearestDistance = result.nearestDistance;
+            }
+        });
+        return bestResult;
+    };
+
+    $(renderer.paper.canvas).mousemove(function (e) {
+        var $this = $(this);
+        var position = $this.position();
+        cursorP.x = e.pageX - position.left;
+        cursorP.y = e.pageY - position.top;
+
+        var snapped = getSnapPoint(cursorP);
+        if (snapped) {
+            snapWidget.p = snapped.snapPoint;
+            snapWidget.shape = snapped.shape;
+            snapWidget.show();
+
+            cursorP.x = snapped.snapPoint.x;
+            cursorP.y = snapped.snapPoint.y;
+        } else {
+            snapWidget.hide();
+        }
+        renderers.draw(snapWidget);
+
+        if (self.currentObject != null) {
+            self.currentObject.b = cursorP;
+            renderers.draw(self.currentObject);
+        }
+    });
+
+    $(renderer.paper.canvas).click(function (e) {
+        if (self.currentObject == null) {
+            var pointA = new G.Point(cursorP);
+            pointA.t = assignId();
+
+            var activeControl = $("#controls input[name=tool]:checked");
+            switch (activeControl.val()) {
+                case "segment":
+                    var segment = new G.Segment(pointA, cursorP);
+                    renderers.draw(segment);
+                    self.currentObject = segment;
+                    break;
+                case "circle":
+                    var circle = new G.Circle(pointA, cursorP);
+                    renderers.draw(circle);
+                    self.currentObject = circle;
+                    break;
+                case "point":
+                    var point = pointA;
+                    renderers.draw(point);
+                    self.objects.push(point);
+                    self.objectCreatedCallbacks.notify(point);
+                    break;
+            }
+        } else {
+            snapWidget.hide();
+
+            self.currentObject.b = new G.Point(cursorP);
+            self.currentObject.b.t = assignId();
+            renderers.draw(self.currentObject);
+            self.objects.push(self.currentObject);
+            self.objectCreatedCallbacks.notify(self.currentObject);
+
+            self.currentObject = null;
+        }
+    });
+};
+
+G.SnapAlgos = {
+    endpoint: {
+        priority: 1,
+        calc: function (objects, point, nearestDistance) {
+            var shape = null, snapPoint = null;
+            var snapToPoint = function (k, p) {
+                var distance = p.distance(point);
+                if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                    nearestDistance = distance;
+                    shape = G.SnapWidget.Endpoint;
+                    snapPoint = p;
+                }
+            };
+
+            $.each(objects, function (key, obj) {
+                if (obj instanceof G.Segment) {
+                    $.each([obj.a, obj.b], snapToPoint);
+                } else if (obj instanceof G.Point) {
+                    snapToPoint(null, obj);
+                }
+            });
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+        }
+    },
+    center: {
+        priority: 10,
+        calc: function (objects, point, nearestDistance) {
+            if (nearestDistance < SNAP_THRESHOLD + 1) {
+                return; // previous snap points have priority over this snap point TODO refactor?
+            }
+            var shape = null, snapPoint = null;
+            $.each(objects, function (key, obj) {
+                if (obj instanceof G.Circle) {
+                    var distance = obj.distance(point);
+                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                        nearestDistance = distance;
+                        shape = G.SnapWidget.Center;
+                        snapPoint = obj.o;
+                    }
+                }
+            });
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+        }},
+    intersection: {
+        priority: 1,
+        calc: function (objects, point, nearestDistance) {
+            var shape = null, snapPoint = null;
+            var nearestObjects = [];
+            $.each(objects, function (key, obj) {
+                if (obj instanceof G.Segment || obj instanceof G.Circle) {
+                    var distance = obj.distance(point);
+                    if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                        nearestObjects.push(obj);
+                    }
+                }
+            });
+            while (nearestObjects.length > 1) {
+                var one = nearestObjects.pop();
+                $.each(nearestObjects, function (key, two) {
+                    var ps = two.intersect(one);
+                    $.each(ps, function (k, p) {
+                        var distance = p.distance(point);
+                        if (distance <= SNAP_THRESHOLD && distance < nearestDistance) {
+                            nearestDistance = distance;
+                            shape = G.SnapWidget.Intersection;
+                            snapPoint = p;
+                        }
+                    });
+                });
+            }
+            return snapPoint != null ? {shape: shape, snapPoint: snapPoint, nearestDistance: nearestDistance} : null;
+        }
+    }
 };
 
 G.Util = {
@@ -435,32 +448,8 @@ G.Point = function () {
         this.y = 0;
     }
     this.t = null;
-    var _obj = null;
-
-    this.draw = function (paper) {
-        _obj = paper.set();
-        _obj.push(paper.circle(this.x, this.y, POINT_SIZE).attr(STROKE_ATTR));
-        _obj.push(paper.circle(this.x, this.y, STROKE_ATTR["stroke-width"]).attr({fill: "white"}));
-        if (this.t)
-            _obj.push(paper.text(this.x - 10, this.y - 15, this.t).attr({"font-size": 16}));
-    };
-
-    this.redraw = function (paper) {
-        if (_obj == null) {
-            this.draw(paper);
-        }
-        _obj.attr({
-            cx: this.x,
-            cy: this.y,
-            x: this.x - 10,
-            y: this.y - 15,
-            text: this.t
-        });
-    };
 
     this.destroy = function () {
-        _obj.remove();
-        _obj = null;
     };
 
     this.distance = function (p) {
@@ -470,6 +459,22 @@ G.Point = function () {
     this.equals = function (p) {
         return p instanceof  G.Point && p.x == this.x && p.y == this.y;
     };
+};
+
+G.Point3D = function () {
+    if (arguments.length > 0 && arguments[0] instanceof G.Point3D) {
+        this.x = arguments[0].x;
+        this.y = arguments[0].y;
+        this.z = arguments[0].z;
+    } else if (arguments.length == 3) {
+        this.x = arguments[0];
+        this.y = arguments[1];
+        this.z = arguments[2];
+    } else {
+        this.x = 0;
+        this.y = 0;
+        this.z = 0;
+    }
 };
 
 /**
@@ -484,9 +489,6 @@ G.Line = function (a, b, c) {
     this.a = a;
     this.b = b;
     this.c = c;
-
-    var _path = null;
-    var _obj = null;
 
     this.slope = function () {
         return -this.a / this.b;
@@ -562,51 +564,7 @@ G.Line = function (a, b, c) {
         return (-this.b * y - this.c ) / this.a;
     };
 
-    this.draw = function (paper) {
-        if (this.b == 0) {
-            if (this.a == 0) {
-                return; // uninitialized
-            }
-            _path = [
-                ["M" , this.x(0), 0 ],
-                [ "L" , this.x(0), paper.height]
-            ];
-        } else {
-            _path = [
-                ["M" , 0, this.y(0) ],
-                [ "L" , paper.width, this.y(paper.width)]
-            ];
-        }
-
-        _obj = paper.path(_path).attr(STROKE_ATTR);
-    };
-
-    this.redraw = function (paper) {
-        if (_obj == null) {
-            this.draw(paper);
-        }
-        if (this.b == 0) {
-            if (this.a == 0) {
-                return; // uninitialized
-            }
-            _path[0][1] = this.x(0);
-            _path[0][2] = 0;
-            _path[1][1] = this.x(paper.height);
-            _path[1][2] = paper.height;
-        } else {
-            _path[0][1] = 0;
-            _path[0][2] = this.y(0);
-            _path[1][1] = paper.width;
-            _path[1][2] = this.y(paper.width);
-        }
-
-        _obj.attr({path: _path});
-    };
-
     this.destroy = function () {
-        _path = null;
-        _obj.remove();
-        _obj = null;
     };
 
     this.translate = function (point) {
@@ -737,43 +695,11 @@ test(function () {
 G.Segment = function (a, b) {
     this.a = a;
     this.b = b;
-    var _path = null;
-    var _obj = null;
     var _line = null;
-
-    this.draw = function (paper) {
-        _path = [
-            ["M" , this.a.x, this.a.y ],
-            [ "L" , this.b.x, this.b.y]
-        ];
-
-        _obj = paper.path(_path).attr(STROKE_ATTR);
-        this.a.draw(paper);
-        this.b.draw(paper);
-    };
-
-    this.redraw = function (paper) {
-        if (_obj == null) {
-            this.draw(paper);
-        }
-        _path[0][1] = this.a.x;
-        _path[0][2] = this.a.y;
-        _path[1][1] = this.b.x;
-        _path[1][2] = this.b.y;
-
-        _obj.attr({path: _path});
-        // this.a.redraw(); A never changes
-        this.b.redraw(paper);
-    };
 
     this.destroy = function () {
         this.a.destroy();
-        this.a = null;
         this.b.destroy();
-        this.b = null;
-        _path = null;
-        _obj.remove();
-        _obj = null;
     };
 
     // FIXME: doesn't account limited segment
@@ -954,34 +880,14 @@ test(function () {
 G.Circle = function (o, b) {
     this.o = o;
     this.b = b;
-    var _obj = null;
 
-    this.draw = function (paper) {
-        _obj = paper.circle(this.o.x, this.o.y, this.radius()).attr(STROKE_ATTR);
-        this.o.draw(paper);
-        this.b.draw(paper);
+    this.destroy = function () {
+        this.o.destroy();
+        this.b.destroy();
     };
 
     this.radius = function () {
         return this.o.distance(this.b);
-    };
-
-    this.redraw = function (paper) {
-        if (_obj == null) {
-            this.draw(paper);
-        }
-        _obj.attr({r: this.o.distance(this.b)});
-        this.o.redraw(paper);
-        this.b.redraw(paper);
-    };
-
-    this.destroy = function () {
-        this.o.destroy();
-        this.o = null;
-        this.b.destroy();
-        this.b = null;
-        _obj.remove();
-        _obj = null;
     };
 
     this.distance = function (p) {
@@ -1045,6 +951,164 @@ G.Circle = function (o, b) {
     this.equals = function (obj) {
         return obj instanceof G.Circle && this.o.equals(obj.o) && this.radius() == obj.radius();
     };
+};
+
+G.PlanarRenderer = {};
+
+/**
+ * Constructs a new instance of vertical planar renderer binding to the specified target
+ * @param target {String} | {Raphael}
+ * @constructor
+ */
+G.PlanarRenderer.V = function (target) {
+    if (typeof target == "string") {
+        this.paper = Raphael(target);
+    } else {
+        this.paper = target;
+    }
+};
+G.PlanarRenderer.V.CACHE = "_G.PlanarRenderer.V.draw";
+G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
+    var CACHE = G.PlanarRenderer.V.CACHE;
+    var paper = this.paper;
+
+    if (!segment[CACHE]) {
+        segment[CACHE] = {};
+        segment[CACHE]._path = [
+            ["M" , segment.a.x, segment.a.y ],
+            [ "L" , segment.b.x, segment.b.y]
+        ];
+
+        segment[CACHE]._obj = paper.path(segment[CACHE]._path).attr(STROKE_ATTR);
+        this.drawPoint(segment.a);
+        this.drawPoint(segment.b);
+
+        var _super = segment.destroy;
+        segment.destroy = function () {
+            segment[CACHE]._obj.remove();
+            _super.call(this);
+        };
+    } else {
+        segment[CACHE]._path[0][1] = segment.a.x;
+        segment[CACHE]._path[0][2] = segment.a.y;
+        segment[CACHE]._path[1][1] = segment.b.x;
+        segment[CACHE]._path[1][2] = segment.b.y;
+
+        segment[CACHE]._obj.attr({path: segment[CACHE]._path});
+        this.drawPoint(segment.a);
+        this.drawPoint(segment.b);
+    }
+};
+G.PlanarRenderer.V.prototype.drawPoint = function (point) {
+    var CACHE = G.PlanarRenderer.V.CACHE;
+    var paper = this.paper;
+
+    if (!point[CACHE]) {
+        point[CACHE] = {};
+        point[CACHE]._obj = paper.set();
+        point[CACHE]._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(STROKE_ATTR));
+        point[CACHE]._obj.push(paper.circle(point.x, point.y, STROKE_ATTR["stroke-width"]).attr({fill: "white"}));
+        if (point.t)
+            point[CACHE]._obj.push(paper.text(point.x - 10, point.y - 15, point.t).attr({"font-size": 16}));
+
+        var _super = point.destroy;
+        point.destroy = function () {
+            point[CACHE]._obj.remove();
+            _super.call(this);
+        };
+    } else {
+        point[CACHE]._obj.attr({
+            cx: point.x,
+            cy: point.y,
+            x: point.x - 10,
+            y: point.y - 15,
+            text: point.t
+        });
+    }
+};
+G.PlanarRenderer.V.prototype.drawCircle = function (circle) {
+    var CACHE = G.PlanarRenderer.V.CACHE;
+    var paper = this.paper;
+
+    if (!circle[CACHE]) {
+        circle[CACHE] = {};
+        circle[CACHE]._obj = paper.circle(circle.o.x, circle.o.y, circle.radius()).attr(STROKE_ATTR);
+        this.drawPoint(circle.o);
+        this.drawPoint(circle.b);
+
+        var _super = circle.destroy;
+        circle.destroy = function () {
+            circle[CACHE]._obj.remove();
+            _super.call(this);
+        };
+    } else {
+        circle[CACHE]._obj.attr({cx: circle.o.x, cy: circle.o.y, r: circle.radius()});
+        this.drawPoint(circle.o);
+        this.drawPoint(circle.b);
+    }
+};
+G.PlanarRenderer.V.prototype.drawLine = function (line) {
+    if (line.b == 0 && line.a == 0) {
+        return; // uninitialized
+    }
+
+    var CACHE = G.PlanarRenderer.V.CACHE;
+    var paper = this.paper;
+
+    if (!line[CACHE]) {
+        line[CACHE] = {};
+
+        if (line.b == 0) {
+            line[CACHE]._path = [
+                ["M" , line.x(0), 0 ],
+                [ "L" , line.x(0), paper.height]
+            ];
+        } else {
+            line[CACHE]._path = [
+                ["M" , 0, line.y(0) ],
+                [ "L" , paper.width, line.y(paper.width)]
+            ];
+        }
+
+        line[CACHE]._obj = paper.path(line[CACHE]._path).attr(STROKE_ATTR);
+
+        var _super = line.destroy;
+        line.destroy = function () {
+            line[CACHE]._obj.remove();
+            _super.call(this);
+        };
+    } else {
+        if (line.b == 0) {
+            line[CACHE]._path[0][1] = line.x(0);
+            line[CACHE]._path[0][2] = 0;
+            line[CACHE]._path[1][1] = line.x(paper.height);
+            line[CACHE]._path[1][2] = paper.height;
+        } else {
+            line[CACHE]._path[0][1] = 0;
+            line[CACHE]._path[0][2] = line.y(0);
+            line[CACHE]._path[1][1] = paper.width;
+            line[CACHE]._path[1][2] = line.y(paper.width);
+        }
+
+        line[CACHE]._obj.attr({path: line[CACHE]._path});
+    }
+};
+G.PlanarRenderer.V.prototype.draw = function (obj) {
+    if (obj instanceof G.Point) {
+        this.drawPoint(obj);
+    }
+    if (obj instanceof G.Segment) {
+        this.drawSegment(obj);
+    }
+    if (obj instanceof G.Circle) {
+        this.drawCircle(obj);
+    }
+    if (obj instanceof G.Line) {
+        this.drawLine(obj);
+    }
+    if (obj instanceof G.SnapWidget) {
+        obj.redraw(this.paper)
+    }
 };
 
 test(function () {

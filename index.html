@@ -45,7 +45,10 @@
 </body>
 <script type="text/javascript">
     $(function () {
-        var geometry = new Geometry("target");
+        var renderer = new G.PlanarRenderer.V("target");
+
+        var geometry = new Geometry();
+        geometry.addRenderer(renderer)
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
         geometry.addObject(horizontal);
