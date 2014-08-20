@@ -35,20 +35,38 @@
 
 <fieldset id="snapping">
     <legend>Snapping</legend>
-    <label><input type="checkbox" name="snapping[]" value="endpoint"/> Endpoints</label>
-    <label><input type="checkbox" name="snapping[]" value="intersection"/> Intersections</label>
+    <label><input type="checkbox" name="snapping[]" value="endpoint" checked/> Endpoints</label>
+    <label><input type="checkbox" name="snapping[]" value="intersection" checked/> Intersections</label>
     <label><input type="checkbox" name="snapping[]" value="center"/> Center</label>
 </fieldset>
 
-<div id="target"></div>
+<table border="1">
+    <tr>
+        <td>
+            <div id="target-v"></div>
+        </td>
+        <td>
+            <div id="target-w"></div>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <div id="target-h"></div>
+        </td>
+    </tr>
+</table>
 
 </body>
 <script type="text/javascript">
     $(function () {
-        var renderer = new G.PlanarRenderer.V("target");
+        var rendererV = new G.PlanarRenderer.V("target-v");
+        var rendererH = new G.PlanarRenderer.V("target-h");
+        var rendererW = new G.PlanarRenderer.V("target-w");
 
         var geometry = new Geometry();
-        geometry.addRenderer(renderer)
+        geometry.addRenderer(rendererV);
+        geometry.addRenderer(rendererH);
+        geometry.addRenderer(rendererW);
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
         geometry.addObject(horizontal);
