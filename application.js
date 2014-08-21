@@ -170,6 +170,10 @@ G.prototype.addRenderer = function (renderer) {
             self.currentObject = null;
         }
     });
+
+    $.each(this.objects, function (k, obj) {
+        renderer.draw(obj);
+    });
 };
 
 G.SnapAlgos = {
@@ -260,10 +264,10 @@ G.Util = {
         return Math.sqrt(x_2 * x_2 + y_2 * y_2 + z_2 * z_2);
     },
     eq: function (a, b, maxdiff) {
-        maxdiff = maxdiff || 0.0000001;
         if (a === b) {
             return true;
         }
+        maxdiff = maxdiff || 0.000000000000001;
         return Math.abs(a - b) < maxdiff;
     }
 };
@@ -460,9 +464,37 @@ G.Point = function () {
     };
 
     this.equals = function (p) {
-        return p instanceof  G.Point && p.x == this.x && p.y == this.y;
+        return p instanceof  G.Point && G.Util.eq(p.x, this.x) && G.Util.eq(p.y, this.y);
+    };
+
+    this.transpose = function () {
+        var x, y;
+        if (arguments.length == 2) {
+            x = arguments[0];
+            y = arguments[1];
+        } else if (arguments[0] instanceof G.Point) {
+            x = arguments[0].x;
+            y = arguments[0].y;
+        }
+        return new G.Point(this.x - x, this.y - y);
+    };
+
+    this.rotate = function (angle) {
+        var cos = Math.cos(angle);
+        var sin = Math.sin(angle);
+        return new G.Point(this.x * cos + this.y * sin, -this.x * sin + this.y * cos);
     };
 };
+
+test(function () {
+    var point = new G.Point(2, -1);
+    assertEquals(new G.Point(3, -4), point.transpose(-1, 3));
+});
+
+test(function () {
+    var point = new G.Point(Math.sqrt(3), 2);
+    assertEquals(new G.Point(3 / 2 * Math.sqrt(3), -.5), point.rotate(Math.PI / 3));
+});
 
 G.Point3D = function () {
     if (arguments.length > 0 && arguments[0] instanceof G.Point3D) {
@@ -489,9 +521,42 @@ G.Point3D = function () {
     };
 
     this.equals = function (p) {
-        return p instanceof  G.Point3D && p.x == this.x && p.y == this.y && p.z == this.z;
+        return p instanceof  G.Point3D && G.Util.eq(p.x, this.x) && G.Util.eq(p.y, this.y) && G.Util.eq(p.z, this.z);
     };
+
+    this.transpose = function () {
+        var x, y;
+        if (arguments.length == 2) {
+            x = arguments[0];
+            y = arguments[1];
+        } else if (arguments[0] instanceof G.Point) {
+            x = arguments[0].x;
+            y = arguments[0].y;
+        }
+        return new G.Point(this.x - x, this.y - y);
+    };
+
+    this.rotate = function (angle) {
+        var cos = Math.cos(angle);
+        var sin = Math.sin(angle);
+        return new G.Point(this.x * cos + this.y * sin, -this.x * sin + this.y * cos);
+    };
+
+    this.transform = function(basis) {
+
+    }
 };
+
+
+test(function () {
+    var point = new G.Point3D(2, -1);
+    assertEquals(new G.Point3D(3, -4), point.transpose(-1, 3));
+});
+
+test(function () {
+    var point = new G.Point(Math.sqrt(3), 2);
+    assertEquals(new G.Point(3 / 2 * Math.sqrt(3), -.5), point.rotate(Math.PI / 3));
+});
 
 /**
  * Constructs a new Line object. Line defined as general form Ax + By + C = 0
@@ -533,6 +598,10 @@ G.Line = function (a, b, c) {
         throw "not implemented for " + obj;
     };
 
+    this.distance = function (point) {
+        return Math.abs(this.a * point.x + this.b * point.y + this.c) / Math.sqrt(this.a * this.a + this.b * this.b);
+    };
+
     /**
      * Returns intersection point with the line or 'undefined'
      * @param line
@@ -540,7 +609,7 @@ G.Line = function (a, b, c) {
      */
     this.intersectLine = function (line) {
         if (this.b == 0 || line.b == 0) {
-            if (this.b == line.b) {
+            if (G.Util.eq(this.b, line.b)) {
                 // parallel
                 return [];
             }
@@ -552,7 +621,7 @@ G.Line = function (a, b, c) {
         } else {
             var a = this.slope();
             var b = line.slope();
-            if (a == b) {
+            if (G.Util.eq(a, b)) {
                 // parallel
                 return [];
             }
@@ -706,6 +775,17 @@ test(function () {
     var line2 = new G.Line(20.0001, 40.0, 60.0);
 
     assertTrue(!line1.equals(line2));
+});
+
+test(function () {
+    var line = new G.Segment(new G.Point(5, 0), new G.Point(5, 50)).asLine();
+    assertEquals(5, line.distance(new G.Point(10, 15)));
+    assertEquals(15, line.distance(new G.Point(-10, 500)));
+});
+
+test(function () {
+    var line = new G.Line(1, -2, 4);
+    assertEquals(Math.sqrt(5) / 5, line.distance(new G.Point(1, 2)));
 });
 
 G.Segment = function (a, b) {
@@ -965,37 +1045,65 @@ G.Circle = function (o, b) {
     };
 
     this.equals = function (obj) {
-        return obj instanceof G.Circle && this.o.equals(obj.o) && this.radius() == obj.radius();
+        return obj instanceof G.Circle && this.o.equals(obj.o) && G.Util.eq(this.radius(), obj.radius());
     };
 };
 
-G.PlanarRenderer = {};
+test(function () {
+    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
+    var circle2 = new G.Circle(new G.Point(1, 1), new G.Point(0, 0));
+    assertEquals(circle1, circle2);
+});
+
+test(function () {
+    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
+    var circle2 = new G.Circle(new G.Point(2, 2), new G.Point(1, 1));
+    assertNotEquals(circle1, circle2);
+});
+
+G.Vector = function (a, b, c) {
+    this.a = a;
+    this.b = b;
+    this.c = c;
+};
+
+/**
+ *
+ * @param origin {G.Point}
+ * @param i {G.Vector}
+ * @param j {G.Vector}
+ * @param k {G.Vector}
+ * @constructor
+ */
+G.Basis = function (origin, i, j, k) {
+    this.origin = origin;
+    this.i = i || G.Vector.i;
+    this.j = j || G.Vector.j;
+    this.k = k || G.Vector.k;
+};
 
 /**
  * Constructs a new instance of horizontal planar renderer binding to the specified target
  * @param target {String} | {Raphael}
  * @constructor
  */
-G.PlanarRenderer.H = function (target) {
+G.PlanarRenderer = function (target) {
     if (typeof target == "string") {
         this.paper = Raphael(target);
     } else {
         this.paper = target;
     }
-    this.cache = G.PlanarRenderer.H.getNewId();
+    this.cache = "_G.PlanarRenderer_";
+    this.basises = [];
 };
-G.PlanarRenderer.H.getNewId = function () {
-    G.PlanarRenderer.H._id = G.PlanarRenderer.H._id || 1;
-    return "_G.PlanarRenderer.H.draw_" + G.PlanarRenderer.H._id++;
-};
-G.PlanarRenderer.H.prototype.updatePosition = function (point3d, e, container) {
+G.PlanarRenderer.prototype.updatePosition = function (point3d, e, container) {
     var position = $(container).position();
 
     point3d.x = e.pageX - position.left;
     point3d.y = e.pageY - position.top;
     point3d.z = 0;
 };
-G.PlanarRenderer.H.prototype.drawSegment = function (segment) {
+G.PlanarRenderer.prototype.drawSegment = function (segment) {
     var CACHE = this.cache;
     var paper = this.paper;
 
@@ -1027,7 +1135,7 @@ G.PlanarRenderer.H.prototype.drawSegment = function (segment) {
         this.drawPoint(segment.b);
     }
 };
-G.PlanarRenderer.H.prototype.drawPoint = function (point) {
+G.PlanarRenderer.prototype.drawPoint = function (point) {
     var CACHE = this.cache;
     var paper = this.paper;
 
@@ -1060,7 +1168,7 @@ G.PlanarRenderer.H.prototype.drawPoint = function (point) {
         });
     }
 };
-G.PlanarRenderer.H.prototype.drawCircle = function (circle) {
+G.PlanarRenderer.prototype.drawCircle = function (circle) {
     var CACHE = this.cache;
     var paper = this.paper;
 
@@ -1082,7 +1190,7 @@ G.PlanarRenderer.H.prototype.drawCircle = function (circle) {
         this.drawPoint(circle.b);
     }
 };
-G.PlanarRenderer.H.prototype.drawLine = function (line) {
+G.PlanarRenderer.prototype.drawLine = function (line) {
     if (line.b == 0 && line.a == 0) {
         return; // uninitialized
     }
@@ -1129,7 +1237,7 @@ G.PlanarRenderer.H.prototype.drawLine = function (line) {
         line[CACHE]._obj.attr({path: line[CACHE]._path});
     }
 };
-G.PlanarRenderer.H.prototype.draw = function (obj) {
+G.PlanarRenderer.prototype.draw = function (obj) {
     if (obj instanceof G.Point) {
         this.drawPoint(obj);
     }
@@ -1151,85 +1259,12 @@ G.PlanarRenderer.H.prototype.draw = function (obj) {
 };
 
 /**
- * Constructs a new instance of vertical planar renderer binding to the specified target
- * @param target {String} | {Raphael}
- * @constructor
+ *
+ * @param basis {G.Basis}
  */
-G.PlanarRenderer.V = function (target) {
-    if (typeof target == "string") {
-        this.paper = Raphael(target);
-    } else {
-        this.paper = target;
-    }
-    this.cache = G.PlanarRenderer.V.getNewId();
+G.PlanarRenderer.prototype.addBasis = function (basis) {
+    this.basises.push(basis);
 };
-G.PlanarRenderer.V.getNewId = function () {
-    G.PlanarRenderer.V._id = G.PlanarRenderer.V._id || 1;
-    return "_G.PlanarRenderer.V.draw_" + G.PlanarRenderer.V._id++;
-};
-G.PlanarRenderer.V.prototype.updatePosition = function (point3d, e, container) {
-    var $c = $(container);
-    var position = $c.position();
-
-    point3d.x = e.pageX - position.left;
-    point3d.y = 0;
-    point3d.z = $c.height() - e.pageY + position.top;
-};
-G.PlanarRenderer.V.prototype.draw = function (obj) {
-    if (obj instanceof G.Point) {
-        this.drawPoint(obj);
-    }
-    if (obj instanceof G.Point3D) {
-        this.drawPoint(obj);
-    }
-};
-G.PlanarRenderer.V.prototype.drawPoint = function (point) {
-    var CACHE = this.cache;
-    var paper = this.paper;
-
-    if (!point[CACHE]) {
-        var c = point[CACHE] = {};
-        c._obj = paper.set();
-        c._obj.push(paper.circle(point.x, paper.height - (point.z || 0), POINT_SIZE).attr(SOLID_ATTR));
-        c._obj.push(paper.circle(point.x, paper.height - (point.z || 0), SOLID_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
-        c._path = [
-            ["M" , point.x, paper.height - (point.z || 0) ],
-            [ "L" , point.x, paper.height]
-        ];
-        c._obj.push(paper.path(c._path).attr(AUX_ATTR));
-        if (point.t) {
-            c._obj.push(paper.text(point.x - 10, paper.height - (point.z || 0) - 15, point.t.toLowerCase() + "'")
-                .attr({"font-size": 16}));
-        }
-
-        var _super = point.destroy;
-        point.destroy = function () {
-            c._obj.remove();
-            delete point[CACHE];
-            _super.call(this);
-        };
-    } else {
-        point[CACHE]._obj.attr({
-            cx: point.x,
-            cy: point.y,
-            x: point.x - 10,
-            y: point.y - 15,
-            text: point.t
-        });
-    }
-};
-
-test(function () {
-    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
-    var circle2 = new G.Circle(new G.Point(1, 1), new G.Point(0, 0));
-    assertEquals(circle1, circle2);
-});
-
-test(function () {
-    var circle1 = new G.Circle(new G.Point(1, 1), new G.Point(2, 2));
-    var circle2 = new G.Circle(new G.Point(2, 2), new G.Point(1, 1));
-    assertNotEquals(circle1, circle2);
-});
 
 function pr(obj) {
     alert(JSON.stringify(obj));
@@ -1267,7 +1302,7 @@ if (TESTS_ENABLED) {
         if (typeof a.equals == "function" && a.equals(b)) {
             return;
         } else {
-            if (a == b)
+            if (G.Util.eq(a, b))
                 return;
         }
         console.error(message || "assertion failed", "Expected:", a, "got:", b);

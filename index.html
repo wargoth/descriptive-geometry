@@ -6,14 +6,10 @@
     <script src="application.js"></script>
     <title></title>
     <style>
-        #target {
+        #target-planar {
             width: 700px;
-            height: 500px;
+            height: 800px;
             border: 1px solid #ccc;
-        }
-
-        #controls .active {
-            font-weight: bold;
         }
 
         fieldset {
@@ -40,28 +36,17 @@
     <label><input type="checkbox" name="snapping[]" value="center"/> Center</label>
 </fieldset>
 
-<table border="1">
-    <tr>
-        <td>
-            <div id="target-v"></div>
-        </td>
-    </tr>
-    <tr>
-        <td>
-            <div id="target-h"></div>
-        </td>
-    </tr>
-</table>
+<div id="target-planar"></div>
 
 </body>
 <script type="text/javascript">
     $(function () {
-        var rendererV = new G.PlanarRenderer.V("target-v");
-        var rendererH = new G.PlanarRenderer.H("target-h");
-
         var geometry = new Geometry();
-        geometry.addRenderer(rendererV);
-        geometry.addRenderer(rendererH);
+
+        var renderer = new G.PlanarRenderer("target-planar");
+        geometry.addRenderer(renderer);
+
+        renderer.addBasis(new G.Basis(new G.Point(renderer.paper.width, renderer.paper.height / 2), new G.Vector(-1, 0, 0), new G.Vector(0, 1, 0), new G.Vector(0, 0, 1)));
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
         geometry.addObject(horizontal);
