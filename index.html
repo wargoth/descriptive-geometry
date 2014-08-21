@@ -30,7 +30,7 @@
     <legend>Tool</legend>
     <label><input type="radio" name="tool" value="segment" checked/> Segment</label>
     <label><input type="radio" name="tool" value="circle"/> Circle</label>
-    <label><input type="radio" name="tool" value="point"/> Point</label>
+    <label><input type="radio" name="tool" value="point3d"/> Point</label>
 </fieldset>
 
 <fieldset id="snapping">
@@ -45,9 +45,6 @@
         <td>
             <div id="target-v"></div>
         </td>
-        <td>
-            <div id="target-w"></div>
-        </td>
     </tr>
     <tr>
         <td>
@@ -60,13 +57,11 @@
 <script type="text/javascript">
     $(function () {
         var rendererV = new G.PlanarRenderer.V("target-v");
-        var rendererH = new G.PlanarRenderer.V("target-h");
-        var rendererW = new G.PlanarRenderer.V("target-w");
+        var rendererH = new G.PlanarRenderer.H("target-h");
 
         var geometry = new Geometry();
         geometry.addRenderer(rendererV);
         geometry.addRenderer(rendererH);
-        geometry.addRenderer(rendererW);
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
         geometry.addObject(horizontal);

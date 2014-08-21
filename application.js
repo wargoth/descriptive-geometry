@@ -2,7 +2,8 @@ var SNAP_THRESHOLD = 10;
 var KEYCODE_ESC = 27;
 var POINT_SIZE = 3;
 var SNAP_WIDGET_SIZE = 15;
-var STROKE_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
+var SOLID_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
+var AUX_ATTR = {stroke: "green", "stroke-width": 1, "stroke-dasharray": "--."};
 var TESTS_ENABLED = true;
 
 var $ = jQuery;
@@ -33,7 +34,7 @@ var Geometry = G = function () {
 
     this.currentObject = null;
 
-    this.cursorP = new G.Point();
+    this.cursorP = new G.Point3D();
 
     this.snapWidget = new G.SnapWidget();
 
@@ -111,10 +112,7 @@ G.prototype.addRenderer = function (renderer) {
     };
 
     $(renderer.paper.canvas).mousemove(function (e) {
-        var $this = $(this);
-        var position = $this.position();
-        cursorP.x = e.pageX - position.left;
-        cursorP.y = e.pageY - position.top;
+        renderer.updatePosition(cursorP, e, this);
 
         var snapped = getSnapPoint(cursorP);
         if (snapped) {
@@ -124,6 +122,7 @@ G.prototype.addRenderer = function (renderer) {
 
             cursorP.x = snapped.snapPoint.x;
             cursorP.y = snapped.snapPoint.y;
+            cursorP.z = snapped.snapPoint.z;
         } else {
             snapWidget.hide(renderer.paper);
         }
@@ -137,7 +136,7 @@ G.prototype.addRenderer = function (renderer) {
 
     $(renderer.paper.canvas).click(function (e) {
         if (self.currentObject == null) {
-            var pointA = new G.Point(cursorP);
+            var pointA = new G.Point3D(cursorP);
             pointA.t = assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
@@ -152,7 +151,7 @@ G.prototype.addRenderer = function (renderer) {
                     renderers.draw(circle);
                     self.currentObject = circle;
                     break;
-                case "point":
+                case "point3d":
                     var point = pointA;
                     renderers.draw(point);
                     self.objects.push(point);
@@ -162,7 +161,7 @@ G.prototype.addRenderer = function (renderer) {
         } else {
             snapWidget.hide(renderer.paper);
 
-            self.currentObject.b = new G.Point(cursorP);
+            self.currentObject.b = new G.Point3D(cursorP);
             self.currentObject.b.t = assignId();
             renderers.draw(self.currentObject);
             self.objects.push(self.currentObject);
@@ -253,6 +252,12 @@ G.Util = {
         var x_2 = (x - x1);
         var y_2 = (y - y1);
         return Math.sqrt(x_2 * x_2 + y_2 * y_2);
+    },
+    distance3d: function (x, y, z, x1, y1, z1) {
+        var x_2 = (x - x1);
+        var y_2 = (y - y1);
+        var z_2 = (z - z1);
+        return Math.sqrt(x_2 * x_2 + y_2 * y_2 + z_2 * z_2);
     },
     eq: function (a, b, maxdiff) {
         maxdiff = maxdiff || 0.0000001;
@@ -473,6 +478,19 @@ G.Point3D = function () {
         this.y = 0;
         this.z = 0;
     }
+
+    this.t = null;
+
+    this.destroy = function () {
+    };
+
+    this.distance = function (p) {
+        return G.Util.distance3d(this.x, this.y, this.z, p.x, p.y, p.z);
+    };
+
+    this.equals = function (p) {
+        return p instanceof  G.Point3D && p.x == this.x && p.y == this.y && p.z == this.z;
+    };
 };
 
 /**
@@ -954,23 +972,30 @@ G.Circle = function (o, b) {
 G.PlanarRenderer = {};
 
 /**
- * Constructs a new instance of vertical planar renderer binding to the specified target
+ * Constructs a new instance of horizontal planar renderer binding to the specified target
  * @param target {String} | {Raphael}
  * @constructor
  */
-G.PlanarRenderer.V = function (target) {
+G.PlanarRenderer.H = function (target) {
     if (typeof target == "string") {
         this.paper = Raphael(target);
     } else {
         this.paper = target;
     }
-    this.cache = G.PlanarRenderer.V.getNewId();
+    this.cache = G.PlanarRenderer.H.getNewId();
 };
-G.PlanarRenderer.V.getNewId = function () {
-    G.PlanarRenderer.V._id = G.PlanarRenderer.V._id || 1;
-    return "_G.PlanarRenderer.V.draw_" + G.PlanarRenderer.V._id++;
+G.PlanarRenderer.H.getNewId = function () {
+    G.PlanarRenderer.H._id = G.PlanarRenderer.H._id || 1;
+    return "_G.PlanarRenderer.H.draw_" + G.PlanarRenderer.H._id++;
 };
-G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
+G.PlanarRenderer.H.prototype.updatePosition = function (point3d, e, container) {
+    var position = $(container).position();
+
+    point3d.x = e.pageX - position.left;
+    point3d.y = e.pageY - position.top;
+    point3d.z = 0;
+};
+G.PlanarRenderer.H.prototype.drawSegment = function (segment) {
     var CACHE = this.cache;
     var paper = this.paper;
 
@@ -981,13 +1006,14 @@ G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
             [ "L" , segment.b.x, segment.b.y]
         ];
 
-        segment[CACHE]._obj = paper.path(segment[CACHE]._path).attr(STROKE_ATTR);
+        segment[CACHE]._obj = paper.path(segment[CACHE]._path).attr(SOLID_ATTR);
         this.drawPoint(segment.a);
         this.drawPoint(segment.b);
 
         var _super = segment.destroy;
         segment.destroy = function () {
             segment[CACHE]._obj.remove();
+            delete segment[CACHE];
             _super.call(this);
         };
     } else {
@@ -1001,21 +1027,27 @@ G.PlanarRenderer.V.prototype.drawSegment = function (segment) {
         this.drawPoint(segment.b);
     }
 };
-G.PlanarRenderer.V.prototype.drawPoint = function (point) {
+G.PlanarRenderer.H.prototype.drawPoint = function (point) {
     var CACHE = this.cache;
     var paper = this.paper;
 
     if (!point[CACHE]) {
-        point[CACHE] = {};
-        point[CACHE]._obj = paper.set();
-        point[CACHE]._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(STROKE_ATTR));
-        point[CACHE]._obj.push(paper.circle(point.x, point.y, STROKE_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
+        var c = point[CACHE] = {};
+        c._obj = paper.set();
+        c._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(SOLID_ATTR));
+        c._obj.push(paper.circle(point.x, point.y, SOLID_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
+        c._path = [
+            ["M" , point.x, point.y ],
+            [ "L" , point.x, 0]
+        ];
+        c._obj.push(paper.path(c._path).attr(AUX_ATTR));
         if (point.t)
-            point[CACHE]._obj.push(paper.text(point.x - 10, point.y - 15, point.t).attr({"font-size": 16}));
+            c._obj.push(paper.text(point.x - 10, point.y - 15, point.t.toLowerCase()).attr({"font-size": 16}));
 
         var _super = point.destroy;
         point.destroy = function () {
-            point[CACHE]._obj.remove();
+            c._obj.remove();
+            delete point[CACHE];
             _super.call(this);
         };
     } else {
@@ -1028,19 +1060,20 @@ G.PlanarRenderer.V.prototype.drawPoint = function (point) {
         });
     }
 };
-G.PlanarRenderer.V.prototype.drawCircle = function (circle) {
+G.PlanarRenderer.H.prototype.drawCircle = function (circle) {
     var CACHE = this.cache;
     var paper = this.paper;
 
     if (!circle[CACHE]) {
         circle[CACHE] = {};
-        circle[CACHE]._obj = paper.circle(circle.o.x, circle.o.y, circle.radius()).attr(STROKE_ATTR);
+        circle[CACHE]._obj = paper.circle(circle.o.x, circle.o.y, circle.radius()).attr(SOLID_ATTR);
         this.drawPoint(circle.o);
         this.drawPoint(circle.b);
 
         var _super = circle.destroy;
         circle.destroy = function () {
             circle[CACHE]._obj.remove();
+            delete circle[CACHE];
             _super.call(this);
         };
     } else {
@@ -1049,7 +1082,7 @@ G.PlanarRenderer.V.prototype.drawCircle = function (circle) {
         this.drawPoint(circle.b);
     }
 };
-G.PlanarRenderer.V.prototype.drawLine = function (line) {
+G.PlanarRenderer.H.prototype.drawLine = function (line) {
     if (line.b == 0 && line.a == 0) {
         return; // uninitialized
     }
@@ -1072,11 +1105,12 @@ G.PlanarRenderer.V.prototype.drawLine = function (line) {
             ];
         }
 
-        line[CACHE]._obj = paper.path(line[CACHE]._path).attr(STROKE_ATTR);
+        line[CACHE]._obj = paper.path(line[CACHE]._path).attr(SOLID_ATTR);
 
         var _super = line.destroy;
         line.destroy = function () {
             line[CACHE]._obj.remove();
+            delete line[CACHE];
             _super.call(this);
         };
     } else {
@@ -1095,8 +1129,11 @@ G.PlanarRenderer.V.prototype.drawLine = function (line) {
         line[CACHE]._obj.attr({path: line[CACHE]._path});
     }
 };
-G.PlanarRenderer.V.prototype.draw = function (obj) {
+G.PlanarRenderer.H.prototype.draw = function (obj) {
     if (obj instanceof G.Point) {
+        this.drawPoint(obj);
+    }
+    if (obj instanceof G.Point3D) {
         this.drawPoint(obj);
     }
     if (obj instanceof G.Segment) {
@@ -1110,6 +1147,75 @@ G.PlanarRenderer.V.prototype.draw = function (obj) {
     }
     if (obj instanceof G.SnapWidget) {
         obj.draw(this.paper)
+    }
+};
+
+/**
+ * Constructs a new instance of vertical planar renderer binding to the specified target
+ * @param target {String} | {Raphael}
+ * @constructor
+ */
+G.PlanarRenderer.V = function (target) {
+    if (typeof target == "string") {
+        this.paper = Raphael(target);
+    } else {
+        this.paper = target;
+    }
+    this.cache = G.PlanarRenderer.V.getNewId();
+};
+G.PlanarRenderer.V.getNewId = function () {
+    G.PlanarRenderer.V._id = G.PlanarRenderer.V._id || 1;
+    return "_G.PlanarRenderer.V.draw_" + G.PlanarRenderer.V._id++;
+};
+G.PlanarRenderer.V.prototype.updatePosition = function (point3d, e, container) {
+    var $c = $(container);
+    var position = $c.position();
+
+    point3d.x = e.pageX - position.left;
+    point3d.y = 0;
+    point3d.z = $c.height() - e.pageY + position.top;
+};
+G.PlanarRenderer.V.prototype.draw = function (obj) {
+    if (obj instanceof G.Point) {
+        this.drawPoint(obj);
+    }
+    if (obj instanceof G.Point3D) {
+        this.drawPoint(obj);
+    }
+};
+G.PlanarRenderer.V.prototype.drawPoint = function (point) {
+    var CACHE = this.cache;
+    var paper = this.paper;
+
+    if (!point[CACHE]) {
+        var c = point[CACHE] = {};
+        c._obj = paper.set();
+        c._obj.push(paper.circle(point.x, paper.height - (point.z || 0), POINT_SIZE).attr(SOLID_ATTR));
+        c._obj.push(paper.circle(point.x, paper.height - (point.z || 0), SOLID_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
+        c._path = [
+            ["M" , point.x, paper.height - (point.z || 0) ],
+            [ "L" , point.x, paper.height]
+        ];
+        c._obj.push(paper.path(c._path).attr(AUX_ATTR));
+        if (point.t) {
+            c._obj.push(paper.text(point.x - 10, paper.height - (point.z || 0) - 15, point.t.toLowerCase() + "'")
+                .attr({"font-size": 16}));
+        }
+
+        var _super = point.destroy;
+        point.destroy = function () {
+            c._obj.remove();
+            delete point[CACHE];
+            _super.call(this);
+        };
+    } else {
+        point[CACHE]._obj.attr({
+            cx: point.x,
+            cy: point.y,
+            x: point.x - 10,
+            y: point.y - 15,
+            text: point.t
+        });
     }
 };
 
