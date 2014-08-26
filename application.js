@@ -3,6 +3,7 @@ var KEYCODE_ESC = 27;
 var POINT_SIZE = 3;
 var SNAP_WIDGET_SIZE = 15;
 var SOLID_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
+var AXIS_ATTR = {stroke: "black", "stroke-width": 2, "stroke-linecap": "round", "arrow-end": "block-midium-long"};
 var AUX_ATTR = {stroke: "green", "stroke-width": 1, "stroke-dasharray": "--."};
 var TESTS_ENABLED = true;
 
@@ -34,7 +35,7 @@ var Geometry = G = function () {
 
     this.currentObject = null;
 
-    this.cursorP = new G.Point3D();
+    this.cursorP = new G.Point();
 
     this.snapWidget = new G.SnapWidget();
 
@@ -136,7 +137,7 @@ G.prototype.addRenderer = function (renderer) {
 
     $(renderer.paper.canvas).click(function (e) {
         if (self.currentObject == null) {
-            var pointA = new G.Point3D(cursorP);
+            var pointA = new G.Point(cursorP);
             pointA.t = assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
@@ -151,7 +152,7 @@ G.prototype.addRenderer = function (renderer) {
                     renderers.draw(circle);
                     self.currentObject = circle;
                     break;
-                case "point3d":
+                case "point":
                     var point = pointA;
                     renderers.draw(point);
                     self.objects.push(point);
@@ -161,7 +162,7 @@ G.prototype.addRenderer = function (renderer) {
         } else {
             snapWidget.hide(renderer.paper);
 
-            self.currentObject.b = new G.Point3D(cursorP);
+            self.currentObject.b = new G.Point(cursorP);
             self.currentObject.b.t = assignId();
             renderers.draw(self.currentObject);
             self.objects.push(self.currentObject);
@@ -542,21 +543,15 @@ G.Point3D = function () {
         return new G.Point(this.x * cos + this.y * sin, -this.x * sin + this.y * cos);
     };
 
-    this.transform = function(basis) {
+    /**
+     *
+     * @param basis {G.Basis}
+     */
+    this.transform = function (basis) {
 
     }
 };
 
-
-test(function () {
-    var point = new G.Point3D(2, -1);
-    assertEquals(new G.Point3D(3, -4), point.transpose(-1, 3));
-});
-
-test(function () {
-    var point = new G.Point(Math.sqrt(3), 2);
-    assertEquals(new G.Point(3 / 2 * Math.sqrt(3), -.5), point.rotate(Math.PI / 3));
-});
 
 /**
  * Constructs a new Line object. Line defined as general form Ax + By + C = 0
@@ -973,6 +968,21 @@ test(function () {
     assertEquals(0, intersection.length);
 });
 
+/**
+ *
+ * @param vector {G.Vector}
+ * @param t {String}
+ * @constructor
+ */
+G.Axis = function (vector, t) {
+    this.vector = vector;
+    this.t = t;
+
+    this.destroy = function () {
+        this.vector.destroy();
+    };
+};
+
 G.Circle = function (o, b) {
     this.o = o;
     this.b = b;
@@ -1061,7 +1071,7 @@ test(function () {
     assertNotEquals(circle1, circle2);
 });
 
-G.Vector = function (a, b, c) {
+G.Vector3D = function (a, b, c) {
     this.a = a;
     this.b = b;
     this.c = c;
@@ -1069,17 +1079,29 @@ G.Vector = function (a, b, c) {
 
 /**
  *
+ * @param a {G.Point}
+ * @param b {G.Point}
+ * @constructor
+ */
+G.Vector = function () {
+    G.Segment.apply(this, arguments);
+};
+G.Vector.prototype = Object.create(G.Segment.prototype);
+G.Vector.prototype.constructor = G.Vector;
+
+/**
+ *
  * @param origin {G.Point}
- * @param i {G.Vector}
- * @param j {G.Vector}
- * @param k {G.Vector}
+ * @param i {G.Vector3D}
+ * @param j {G.Vector3D}
+ * @param k {G.Vector3D}
  * @constructor
  */
 G.Basis = function (origin, i, j, k) {
     this.origin = origin;
-    this.i = i || G.Vector.i;
-    this.j = j || G.Vector.j;
-    this.k = k || G.Vector.k;
+    this.i = i || G.Vector3D.i;
+    this.j = j || G.Vector3D.j;
+    this.k = k || G.Vector3D.k;
 };
 
 /**
@@ -1136,6 +1158,34 @@ G.PlanarRenderer.prototype.drawSegment = function (segment) {
     }
 };
 G.PlanarRenderer.prototype.drawPoint = function (point) {
+    var CACHE = this.cache;
+    var paper = this.paper;
+
+    if (!point[CACHE]) {
+        var c = point[CACHE] = {};
+        c._obj = paper.set();
+        c._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(SOLID_ATTR));
+        c._obj.push(paper.circle(point.x, point.y, SOLID_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
+        if (point.t)
+            c._obj.push(paper.text(point.x - 10, point.y - 15, point.t).attr({"font-size": 16}));
+
+        var _super = point.destroy;
+        point.destroy = function () {
+            c._obj.remove();
+            delete point[CACHE];
+            _super.call(this);
+        };
+    } else {
+        point[CACHE]._obj.attr({
+            cx: point.x,
+            cy: point.y,
+            x: point.x - 10,
+            y: point.y - 15,
+            text: point.t
+        });
+    }
+};
+G.PlanarRenderer.prototype.drawPoint3D = function (point) {
     var CACHE = this.cache;
     var paper = this.paper;
 
@@ -1237,12 +1287,32 @@ G.PlanarRenderer.prototype.drawLine = function (line) {
         line[CACHE]._obj.attr({path: line[CACHE]._path});
     }
 };
+/**
+ *
+ * @param axis {G.Axis}
+ */
+G.PlanarRenderer.prototype.drawAxis = function (axis) {
+    var paper = this.paper;
+
+    var obj = paper.set();
+    obj.push(paper.path([
+        ["M" , axis.vector.a.x, axis.vector.a.y ],
+        [ "L" , axis.vector.b.x, axis.vector.b.y]
+    ])).attr(AXIS_ATTR);
+    obj.push(paper.text(axis.vector.b.x - 10, axis.vector.b.y - 15, axis.t).attr({"font-size": 16}));
+
+    var _super = axis.destroy;
+    axis.destroy = function () {
+        obj.remove();
+        _super.call(this);
+    };
+};
 G.PlanarRenderer.prototype.draw = function (obj) {
     if (obj instanceof G.Point) {
         this.drawPoint(obj);
     }
     if (obj instanceof G.Point3D) {
-        this.drawPoint(obj);
+        this.drawPoint3D(obj);
     }
     if (obj instanceof G.Segment) {
         this.drawSegment(obj);
@@ -1255,6 +1325,9 @@ G.PlanarRenderer.prototype.draw = function (obj) {
     }
     if (obj instanceof G.SnapWidget) {
         obj.draw(this.paper)
+    }
+    if (obj instanceof G.Axis) {
+        this.drawAxis(obj)
     }
 };
 
@@ -1270,8 +1343,8 @@ function pr(obj) {
     alert(JSON.stringify(obj));
 }
 
-function log(obj) {
-    console.log(obj);
+function log() {
+    console.log.apply(console, arguments);
 }
 
 function watchdog(obj) {

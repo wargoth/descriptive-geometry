@@ -7,8 +7,8 @@
     <title></title>
     <style>
         #target-planar {
-            width: 700px;
-            height: 800px;
+            width: 900px;
+            height: 600px;
             border: 1px solid #ccc;
         }
 
@@ -26,7 +26,7 @@
     <legend>Tool</legend>
     <label><input type="radio" name="tool" value="segment" checked/> Segment</label>
     <label><input type="radio" name="tool" value="circle"/> Circle</label>
-    <label><input type="radio" name="tool" value="point3d"/> Point</label>
+    <label><input type="radio" name="tool" value="point"/> Point</label>
 </fieldset>
 
 <fieldset id="snapping">
@@ -46,7 +46,8 @@
         var renderer = new G.PlanarRenderer("target-planar");
         geometry.addRenderer(renderer);
 
-        renderer.addBasis(new G.Basis(new G.Point(renderer.paper.width, renderer.paper.height / 2), new G.Vector(-1, 0, 0), new G.Vector(0, 1, 0), new G.Vector(0, 0, 1)));
+        var axis = new G.Axis(new G.Vector(new G.Point(500, 300), new G.Point(150, 300)), "x");
+        geometry.addObject(axis);
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
         geometry.addObject(horizontal);
