@@ -31,9 +31,10 @@
 
 <fieldset id="snapping">
     <legend>Snapping</legend>
-    <label><input type="checkbox" name="snapping[]" value="endpoint" checked/> Endpoints</label>
-    <label><input type="checkbox" name="snapping[]" value="intersection" checked/> Intersections</label>
-    <label><input type="checkbox" name="snapping[]" value="center"/> Center</label>
+    <label><input type="checkbox" name="snapping" value="endpoint" checked/> Endpoints</label>
+    <label><input type="checkbox" name="snapping" value="intersection" checked/> Intersections</label>
+    <label><input type="checkbox" name="snapping" value="center"/> Center</label>
+    <label><input type="checkbox" name="ortho" value="ortho"/> Ortho</label>
 </fieldset>
 
 <div id="target-planar"></div>
@@ -46,7 +47,7 @@
         var renderer = new G.PlanarRenderer("target-planar");
         geometry.addRenderer(renderer);
 
-        var axis = new G.Axis(new G.Vector(new G.Point(500, 300), new G.Point(150, 300)), "x");
+        var axis = new G.Axis(new G.Point(500, 300), new G.Point(150, 300), "x");
         geometry.addObject(axis);
 
         var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));

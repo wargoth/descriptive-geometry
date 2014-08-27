@@ -3,7 +3,7 @@ var KEYCODE_ESC = 27;
 var POINT_SIZE = 3;
 var SNAP_WIDGET_SIZE = 15;
 var SOLID_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
-var AXIS_ATTR = {stroke: "black", "stroke-width": 2, "stroke-linecap": "round", "arrow-end": "block-midium-long"};
+var AXIS_ATTR = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
 var AUX_ATTR = {stroke: "green", "stroke-width": 1, "stroke-dasharray": "--."};
 var TESTS_ENABLED = true;
 
@@ -38,6 +38,8 @@ var Geometry = G = function () {
     this.cursorP = new G.Point();
 
     this.snapWidget = new G.SnapWidget();
+    this.snapOptions = [];
+    this.ortho = false;
 
     $("#controls input:radio").click(function () {
         if (self.currentObject != null) {
@@ -45,6 +47,15 @@ var Geometry = G = function () {
             self.currentObject = null;
         }
     });
+
+    var initTools = function () {
+        self.snapOptions = $("#snapping input[name=snapping]:checked").map(function () {
+            return $(this).val();
+        }).get();
+        self.ortho = $("#snapping input[name=ortho]").prop('checked');
+    };
+    initTools();
+    $("#snapping input").click(initTools);
 
     $(document).keyup(function (e) {
         e = e || window.event;
@@ -82,27 +93,26 @@ G.prototype.addRenderer = function (renderer) {
     var self = this;
     var renderers = this.renderers;
     var cursorP = this.cursorP;
+    var pointA = null;
     var snapWidget = this.snapWidget;
 
     renderers.push(renderer);
 
     var getSnapPoint = function (point) {
-        var snapping = $("#snapping input:checked").map(function () {
-            return $(this).val();
-        }).get();
-        if (snapping.length == 0) {
+        var snapOptions = self.snapOptions;
+        if (snapOptions.length == 0) {
             return;
         }
 
         // circle snapping is aggressive, has to be last in the list
-        snapping.sort(function (a, b) {
+        snapOptions.sort(function (a, b) {
             return G.SnapAlgos[a].priority - G.SnapAlgos[b].priority;
         });
 
         var nearestDistance = SNAP_THRESHOLD + 1;
         var bestResult = null;
 
-        $.each(snapping, function (k, name) {
+        $.each(snapOptions, function (k, name) {
             var result = G.SnapAlgos[name].calc(self.objects, point, nearestDistance);
             if (result) {
                 bestResult = result;
@@ -126,10 +136,20 @@ G.prototype.addRenderer = function (renderer) {
             cursorP.z = snapped.snapPoint.z;
         } else {
             snapWidget.hide(renderer.paper);
+
+            if (self.ortho && self.currentObject) {
+                var dx = Math.abs(pointA.x - cursorP.x);
+                var dy = Math.abs(pointA.y - cursorP.y);
+                if (dx > dy) {
+                    cursorP.y = pointA.y;
+                } else {
+                    cursorP.x = pointA.x;
+                }
+            }
         }
         renderer.draw(snapWidget);
 
-        if (self.currentObject != null) {
+        if (self.currentObject) {
             self.currentObject.b = cursorP;
             renderers.draw(self.currentObject);
         }
@@ -137,7 +157,7 @@ G.prototype.addRenderer = function (renderer) {
 
     $(renderer.paper.canvas).click(function (e) {
         if (self.currentObject == null) {
-            var pointA = new G.Point(cursorP);
+            pointA = new G.Point(cursorP);
             pointA.t = assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
@@ -192,7 +212,7 @@ G.SnapAlgos = {
             };
 
             $.each(objects, function (key, obj) {
-                if (obj instanceof G.Segment) {
+                if (obj instanceof G.Segment && !(obj instanceof G.Axis)) {
                     $.each([obj.a, obj.b], snapToPoint);
                 } else if (obj instanceof G.Point) {
                     snapToPoint(null, obj);
@@ -970,18 +990,17 @@ test(function () {
 
 /**
  *
- * @param vector {G.Vector}
+ * @param a {G.Point}
+ * @param b {G.Point}
  * @param t {String}
  * @constructor
  */
-G.Axis = function (vector, t) {
-    this.vector = vector;
+G.Axis = function (a, b, t) {
     this.t = t;
-
-    this.destroy = function () {
-        this.vector.destroy();
-    };
+    G.Segment.call(this, a, b);
 };
+G.Axis.prototype = Object.create(G.Segment.prototype);
+G.Axis.prototype.constructor = G.Axis.prototype.constructor;
 
 G.Circle = function (o, b) {
     this.o = o;
@@ -1083,8 +1102,8 @@ G.Vector3D = function (a, b, c) {
  * @param b {G.Point}
  * @constructor
  */
-G.Vector = function () {
-    G.Segment.apply(this, arguments);
+G.Vector = function (a, b) {
+    G.Segment.call(this, a, b);
 };
 G.Vector.prototype = Object.create(G.Segment.prototype);
 G.Vector.prototype.constructor = G.Vector;
@@ -1296,10 +1315,10 @@ G.PlanarRenderer.prototype.drawAxis = function (axis) {
 
     var obj = paper.set();
     obj.push(paper.path([
-        ["M" , axis.vector.a.x, axis.vector.a.y ],
-        [ "L" , axis.vector.b.x, axis.vector.b.y]
+        ["M" , axis.a.x, axis.a.y ],
+        [ "L" , axis.b.x, axis.b.y]
     ])).attr(AXIS_ATTR);
-    obj.push(paper.text(axis.vector.b.x - 10, axis.vector.b.y - 15, axis.t).attr({"font-size": 16}));
+    obj.push(paper.text(axis.b.x + 5, axis.b.y - 15, axis.t.toLowerCase()).attr({"font-size": 16}));
 
     var _super = axis.destroy;
     axis.destroy = function () {
@@ -1310,24 +1329,18 @@ G.PlanarRenderer.prototype.drawAxis = function (axis) {
 G.PlanarRenderer.prototype.draw = function (obj) {
     if (obj instanceof G.Point) {
         this.drawPoint(obj);
-    }
-    if (obj instanceof G.Point3D) {
+    } else if (obj instanceof G.Point3D) {
         this.drawPoint3D(obj);
-    }
-    if (obj instanceof G.Segment) {
-        this.drawSegment(obj);
-    }
-    if (obj instanceof G.Circle) {
-        this.drawCircle(obj);
-    }
-    if (obj instanceof G.Line) {
-        this.drawLine(obj);
-    }
-    if (obj instanceof G.SnapWidget) {
-        obj.draw(this.paper)
-    }
-    if (obj instanceof G.Axis) {
+    } else if (obj instanceof G.Axis) {
         this.drawAxis(obj)
+    } else if (obj instanceof G.Segment) {
+        this.drawSegment(obj);
+    } else if (obj instanceof G.Circle) {
+        this.drawCircle(obj);
+    } else if (obj instanceof G.Line) {
+        this.drawLine(obj);
+    } else if (obj instanceof G.SnapWidget) {
+        obj.draw(this.paper)
     }
 };
 
