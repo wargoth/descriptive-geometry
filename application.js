@@ -9,11 +9,6 @@ var TESTS_ENABLED = true;
 
 var $ = jQuery;
 
-var assignId = function () {
-    window.pointIds = window.pointIds || "A".charCodeAt(0);
-    return String.fromCharCode(window.pointIds++);
-};
-
 var Geometry = G = function () {
     var self = this;
 
@@ -158,14 +153,19 @@ G.prototype.addRenderer = function (renderer) {
     $(renderer.paper.canvas).click(function (e) {
         if (self.currentObject == null) {
             pointA = new G.Point(cursorP);
-            pointA.t = assignId();
+            pointA.t = G.Point.assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
             switch (activeControl.val()) {
                 case "segment":
-                    var segment = new G.Segment(pointA, cursorP);
+                    var segment = new G.Segment2D(pointA, cursorP);
                     renderers.draw(segment);
                     self.currentObject = segment;
+                    break;
+                case "auxiliary":
+                    var aux = new G.AuxiliaryLine(pointA, cursorP);
+                    renderers.draw(aux);
+                    self.currentObject = aux;
                     break;
                 case "circle":
                     var circle = new G.Circle(pointA, cursorP);
@@ -183,7 +183,7 @@ G.prototype.addRenderer = function (renderer) {
             snapWidget.hide(renderer.paper);
 
             self.currentObject.b = new G.Point(cursorP);
-            self.currentObject.b.t = assignId();
+            self.currentObject.b.t = G.Point.assignId();
             renderers.draw(self.currentObject);
             self.objects.push(self.currentObject);
             self.objectCreatedCallbacks.notify(self.currentObject);
@@ -212,7 +212,7 @@ G.SnapAlgos = {
             };
 
             $.each(objects, function (key, obj) {
-                if (obj instanceof G.Segment && !(obj instanceof G.Axis)) {
+                if (obj instanceof G.Segment2D || obj instanceof G.AuxiliaryLine) {
                     $.each([obj.a, obj.b], snapToPoint);
                 } else if (obj instanceof G.Point) {
                     snapToPoint(null, obj);
@@ -465,17 +465,23 @@ G.SnapWidget.Shape.Intersection = {
 };
 
 G.Point = function () {
-    if (arguments.length > 0 && arguments[0] instanceof G.Point) {
-        this.x = arguments[0].x;
-        this.y = arguments[0].y;
-    } else if (arguments.length == 2) {
-        this.x = arguments[0];
-        this.y = arguments[1];
+    var args = Array.prototype.slice.call(arguments);
+    if (args.length > 0 && args[0] instanceof G.Point) {
+        var point = args.shift();
+        this.x = point.x;
+        this.y = point.y;
+    } else if (args.length >= 2) {
+        this.x = args.shift();
+        this.y = args.shift();
     } else {
         this.x = 0;
         this.y = 0;
     }
-    this.t = null;
+    if (args.length == 1) {
+        this.t = args.shift();
+    } else {
+        this.t = null;
+    }
 
     this.destroy = function () {
     };
@@ -505,6 +511,10 @@ G.Point = function () {
         var sin = Math.sin(angle);
         return new G.Point(this.x * cos + this.y * sin, -this.x * sin + this.y * cos);
     };
+};
+G.Point.assignId = function () {
+    window.pointIds = window.pointIds || "A".charCodeAt(0);
+    return String.fromCharCode(window.pointIds++);
 };
 
 test(function () {
@@ -803,6 +813,12 @@ test(function () {
     assertEquals(Math.sqrt(5) / 5, line.distance(new G.Point(1, 2)));
 });
 
+/**
+ * Segment math type
+ * @param a
+ * @param b
+ * @constructor
+ */
 G.Segment = function (a, b) {
     this.a = a;
     this.b = b;
@@ -989,6 +1005,26 @@ test(function () {
 });
 
 /**
+ * Visible physical line subtype
+ * @constructor
+ */
+G.Segment2D = function () {
+    G.Segment.apply(this, arguments);
+};
+G.Segment2D.prototype = Object.create(G.Segment.prototype);
+G.Segment2D.prototype.constructor = G.Segment2D;
+
+/**
+ * Auxiliary construction line subtype
+ * @constructor
+ */
+G.AuxiliaryLine = function () {
+    G.Segment.apply(this, arguments);
+};
+G.AuxiliaryLine.prototype = Object.create(G.Segment.prototype);
+G.AuxiliaryLine.prototype.constructor = G.AuxiliaryLine;
+
+/**
  *
  * @param a {G.Point}
  * @param b {G.Point}
@@ -1150,12 +1186,11 @@ G.PlanarRenderer.prototype.drawSegment = function (segment) {
 
     if (!segment[CACHE]) {
         segment[CACHE] = {};
-        segment[CACHE]._path = [
+
+        segment[CACHE]._obj = paper.path([
             ["M" , segment.a.x, segment.a.y ],
             [ "L" , segment.b.x, segment.b.y]
-        ];
-
-        segment[CACHE]._obj = paper.path(segment[CACHE]._path).attr(SOLID_ATTR);
+        ]).attr(SOLID_ATTR);
         this.drawPoint(segment.a);
         this.drawPoint(segment.b);
 
@@ -1166,14 +1201,37 @@ G.PlanarRenderer.prototype.drawSegment = function (segment) {
             _super.call(this);
         };
     } else {
-        segment[CACHE]._path[0][1] = segment.a.x;
-        segment[CACHE]._path[0][2] = segment.a.y;
-        segment[CACHE]._path[1][1] = segment.b.x;
-        segment[CACHE]._path[1][2] = segment.b.y;
-
-        segment[CACHE]._obj.attr({path: segment[CACHE]._path});
+        segment[CACHE]._obj.attr({path: [
+            ["M" , segment.a.x, segment.a.y ],
+            [ "L" , segment.b.x, segment.b.y]
+        ]});
         this.drawPoint(segment.a);
         this.drawPoint(segment.b);
+    }
+};
+G.PlanarRenderer.prototype.drawAuxiliaryLine = function (segment) {
+    var CACHE = this.cache;
+    var paper = this.paper;
+
+    if (!segment[CACHE]) {
+        segment[CACHE] = {};
+
+        segment[CACHE]._obj = paper.path([
+            ["M" , segment.a.x, segment.a.y ],
+            [ "L" , segment.b.x, segment.b.y]
+        ]).attr(AUX_ATTR).toBack();
+
+        var _super = segment.destroy;
+        segment.destroy = function () {
+            segment[CACHE]._obj.remove();
+            delete segment[CACHE];
+            _super.call(this);
+        };
+    } else {
+        segment[CACHE]._obj.attr({path: [
+            ["M" , segment.a.x, segment.a.y ],
+            [ "L" , segment.b.x, segment.b.y]
+        ]});
     }
 };
 G.PlanarRenderer.prototype.drawPoint = function (point) {
@@ -1333,8 +1391,10 @@ G.PlanarRenderer.prototype.draw = function (obj) {
         this.drawPoint3D(obj);
     } else if (obj instanceof G.Axis) {
         this.drawAxis(obj)
-    } else if (obj instanceof G.Segment) {
+    } else if (obj instanceof G.Segment2D) {
         this.drawSegment(obj);
+    } else if (obj instanceof G.AuxiliaryLine) {
+        this.drawAuxiliaryLine(obj);
     } else if (obj instanceof G.Circle) {
         this.drawCircle(obj);
     } else if (obj instanceof G.Line) {

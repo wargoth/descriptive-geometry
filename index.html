@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8"/>
     <script src="jquery-1.11.1.min.js"></script>
     <script src="raphael-min.js"></script>
     <script src="application.js"></script>
@@ -20,11 +21,13 @@
 </head>
 <body>
 
-<p>Construct a line (segment) that goes through point A and that is perpendicular to the given line segment.</p>
+<p>Найти натуральную величину отрезка <em>AB</em>,
+    заданного его проекциями, и определить углы наклона прямой к плоскостям <em>V</em> и <em>H</em></p>
 
 <fieldset id="controls">
     <legend>Tool</legend>
     <label><input type="radio" name="tool" value="segment" checked/> Segment</label>
+    <label><input type="radio" name="tool" value="auxiliary"/> Construction line</label>
     <label><input type="radio" name="tool" value="circle"/> Circle</label>
     <label><input type="radio" name="tool" value="point"/> Point</label>
 </fieldset>
@@ -47,23 +50,22 @@
         var renderer = new G.PlanarRenderer("target-planar");
         geometry.addRenderer(renderer);
 
-        var axis = new G.Axis(new G.Point(500, 300), new G.Point(150, 300), "x");
-        geometry.addObject(axis);
+        var a = G.Point.assignId();
+        var b = G.Point.assignId();
+        var ab = new G.Segment2D(new G.Point(300, 260, a), new G.Point(600, 125, b));
+        geometry.addObject(ab);
 
-        var horizontal = new G.Segment(new G.Point(190, 280), new G.Point(450, 280));
-        geometry.addObject(horizontal);
+        var ab_ = new G.Segment2D(new G.Point(300, 350, a + "'"), new G.Point(600, 450, b + "'"));
+        geometry.addObject(ab_);
 
-        var point = new G.Point(310, 180);
-        geometry.addObject(point);
-
-        var testLine1 = new G.Segment(new G.Point(310, 180), new G.Point(310, 200)).asLine();
+        var auxA = new G.AuxiliaryLine(new G.Point(300, 260), new G.Point(300, 350));
+        geometry.addObject(auxA);
+        var auxB = new G.AuxiliaryLine(new G.Point(600, 125), new G.Point(600, 450));
+        geometry.addObject(auxA);
 
         geometry.onObjectCreated(watchdog);
 
         geometry.onObjectCreated(function (obj) {
-            if (geometry.testCreated(testLine1)) {
-                pr("yay!");
-            }
         });
     });
 </script>
