@@ -1,5 +1,6 @@
 var SNAP_THRESHOLD = 10;
 var KEYCODE_ESC = 27;
+var KEYCODE_DEL = 46;
 var POINT_SIZE = 3;
 var SNAP_WIDGET_SIZE = 15;
 var SOLID_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
@@ -12,10 +13,17 @@ var $ = jQuery;
 var Geometry = G = function () {
     var self = this;
 
+    this.mode = G.Mode.READY;
+
     this.renderers = [];
     this.renderers.draw = function (obj) {
         $.each(this, function (k, renderer) {
             renderer.draw(obj);
+        });
+    };
+    this.renderers.attachHandlers = function (obj) {
+        $.each(this, function (k, renderer) {
+            renderer.attachHandlers(self, obj);
         });
     };
 
@@ -37,10 +45,7 @@ var Geometry = G = function () {
     this.ortho = false;
 
     $("#controls input:radio").click(function () {
-        if (self.currentObject != null) {
-            self.currentObject.destroy();
-            self.currentObject = null;
-        }
+        self.resetMode();
     });
 
     var initTools = function () {
@@ -56,13 +61,42 @@ var Geometry = G = function () {
         e = e || window.event;
         var keyCode = e.keyCode || e.which;
         if (keyCode == KEYCODE_ESC) {
-            if (self.currentObject != null) {
+            self.resetMode();
+        } else if (keyCode == KEYCODE_DEL) {
+            if (self.mode == G.Mode.SELECT) {
+                assertTrue(self.currentObject != null);
                 self.currentObject.destroy();
+                var inArray = $.inArray(self.currentObject, self.objects);
+                delete self.objects[ inArray];
                 self.currentObject = null;
+                self.mode = G.Mode.READY;
             }
         }
     });
 };
+
+G.prototype.resetMode = function () {
+    switch (this.mode) {
+        case G.Mode.IN_PROGRESS:
+            assertTrue(this.currentObject != null);
+            this.currentObject.destroy();
+            this.currentObject = null;
+            this.mode = G.Mode.READY;
+            break;
+        case G.Mode.SELECT:
+            assertTrue(this.currentObject != null);
+            this.currentObject.unselect();
+            this.mode = G.Mode.READY;
+            break;
+    }
+};
+
+G.Mode = Object.freeze({
+    READY: "ready",
+    SELECT: "select",
+    HOVER: "hover",
+    IN_PROGRESS: "in progress"
+});
 
 G.prototype.onObjectCreated = function (callback) {
     this.objectCreatedCallbacks.push(callback);
@@ -71,6 +105,7 @@ G.prototype.onObjectCreated = function (callback) {
 G.prototype.addObject = function (obj) {
     this.objects.push(obj);
     this.renderers.draw(obj);
+    this.renderers.attachHandlers(obj);
 };
 
 G.prototype.testCreated = function (obj) {
@@ -144,31 +179,34 @@ G.prototype.addRenderer = function (renderer) {
         }
         renderer.draw(snapWidget);
 
-        if (self.currentObject) {
-            self.currentObject.b = cursorP;
+        if (self.mode == G.Mode.IN_PROGRESS) {
+            assertTrue(self.currentObject != null);
+            self.currentObject.b.x = cursorP.x;
+            self.currentObject.b.y = cursorP.y;
             renderers.draw(self.currentObject);
         }
     });
 
     $(renderer.paper.canvas).click(function (e) {
-        if (self.currentObject == null) {
+        if (self.mode == G.Mode.READY) {
+            self.mode = G.Mode.IN_PROGRESS;
             pointA = new G.Point(cursorP);
             pointA.t = G.Point.assignId();
 
             var activeControl = $("#controls input[name=tool]:checked");
             switch (activeControl.val()) {
                 case "segment":
-                    var segment = new G.Segment2D(pointA, cursorP);
+                    var segment = new G.Segment2D(pointA, new G.Point(cursorP));
                     renderers.draw(segment);
                     self.currentObject = segment;
                     break;
                 case "auxiliary":
-                    var aux = new G.AuxiliaryLine(pointA, cursorP);
+                    var aux = new G.AuxiliaryLine(pointA, new G.Point(cursorP));
                     renderers.draw(aux);
                     self.currentObject = aux;
                     break;
                 case "circle":
-                    var circle = new G.Circle(pointA, cursorP);
+                    var circle = new G.Circle(pointA, new G.Point(cursorP));
                     renderers.draw(circle);
                     self.currentObject = circle;
                     break;
@@ -179,12 +217,16 @@ G.prototype.addRenderer = function (renderer) {
                     self.objectCreatedCallbacks.notify(point);
                     break;
             }
-        } else {
+        } else if (self.mode == G.Mode.IN_PROGRESS) {
+            self.mode = G.Mode.READY;
             snapWidget.hide(renderer.paper);
 
-            self.currentObject.b = new G.Point(cursorP);
+            assertTrue(self.currentObject != null);
+            self.currentObject.b.x = cursorP.x;
+            self.currentObject.b.y = cursorP.y;
             self.currentObject.b.t = G.Point.assignId();
             renderers.draw(self.currentObject);
+            renderers.attachHandlers(self.currentObject);
             self.objects.push(self.currentObject);
             self.objectCreatedCallbacks.notify(self.currentObject);
 
@@ -1208,6 +1250,7 @@ G.PlanarRenderer.prototype.drawSegment = function (segment) {
         this.drawPoint(segment.a);
         this.drawPoint(segment.b);
     }
+    return segment[CACHE]._obj;
 };
 G.PlanarRenderer.prototype.drawAuxiliaryLine = function (segment) {
     var CACHE = this.cache;
@@ -1243,8 +1286,7 @@ G.PlanarRenderer.prototype.drawPoint = function (point) {
         c._obj = paper.set();
         c._obj.push(paper.circle(point.x, point.y, POINT_SIZE).attr(SOLID_ATTR));
         c._obj.push(paper.circle(point.x, point.y, SOLID_ATTR["stroke-width"]).attr({fill: "white", stroke: "white"}));
-        if (point.t)
-            c._obj.push(paper.text(point.x - 10, point.y - 15, point.t).attr({"font-size": 16}));
+        c._obj.push(paper.text(point.x - 10, point.y - 15, point.t || "").attr({"font-size": 16}));
 
         var _super = point.destroy;
         point.destroy = function () {
@@ -1258,7 +1300,7 @@ G.PlanarRenderer.prototype.drawPoint = function (point) {
             cy: point.y,
             x: point.x - 10,
             y: point.y - 15,
-            text: point.t
+            text: point.t || ""
         });
     }
 };
@@ -1403,13 +1445,68 @@ G.PlanarRenderer.prototype.draw = function (obj) {
         obj.draw(this.paper)
     }
 };
-
 /**
  *
  * @param basis {G.Basis}
  */
 G.PlanarRenderer.prototype.addBasis = function (basis) {
     this.basises.push(basis);
+};
+
+G.PlanarRenderer.prototype.attachHandlers = function (g, obj) {
+    var CACHE = this.cache;
+    var c = obj[CACHE];
+    c._attr = c._obj.attr();
+
+    var glow = c._obj.glow().attr({stroke: "transparent"});
+
+    var h_in = function () {
+        if (g.mode == G.Mode.READY || g.mode == G.Mode.SELECT) {
+            document.body.style.cursor = "pointer";
+            if (!c._selected)
+                c._obj.attr({stroke: "orange"});
+        }
+        if (g.mode == G.Mode.READY) {
+            g.mode = G.Mode.HOVER;
+        }
+    };
+    var h_out = function () {
+        if (g.mode == G.Mode.HOVER || g.mode == G.Mode.SELECT) {
+            document.body.style.cursor = "auto";
+            if (!c._selected)
+                c._obj.attr(c._attr);
+        }
+        if (g.mode == G.Mode.HOVER) {
+            g.mode = G.Mode.READY;
+        }
+    };
+    var click = function () {
+        if (g.mode == G.Mode.HOVER || g.mode == G.Mode.SELECT) {
+            g.mode = G.Mode.SELECT;
+            if (g.currentObject) {
+                g.currentObject.unselect();
+            }
+            c._selected = true;
+            g.currentObject = obj;
+            c._obj.attr({stroke: "red"});
+        }
+    };
+    glow.hover(h_in, h_out);
+    c._obj.hover(h_in, h_out);
+    glow.click(click);
+    c._obj.click(click);
+
+    var _super = obj.destroy;
+    obj.destroy = function () {
+        glow.remove();
+        delete c._attr;
+        _super.call(this);
+    };
+
+    obj.unselect = function () {
+        g.currentObject[CACHE]._obj.attr(g.currentObject[CACHE]._attr);
+        g.currentObject[CACHE]._selected = false;
+    };
 };
 
 function pr(obj) {
