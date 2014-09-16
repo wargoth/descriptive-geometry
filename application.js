@@ -6,14 +6,13 @@ var SNAP_WIDGET_SIZE = 15;
 var SOLID_ATTR = {stroke: "blue", "stroke-width": 2, "stroke-linecap": "round"};
 var AXIS_ATTR = {stroke: "black", "stroke-width": 1, "stroke-linecap": "round"};
 var AUX_ATTR = {stroke: "green", "stroke-width": 1, "stroke-dasharray": "--."};
+var TRACK_ATTR = {stroke: "black", "stroke-width": 1, "stroke-dasharray": "."};
 var TESTS_ENABLED = true;
 
 var $ = jQuery;
 
 var Geometry = G = function () {
     var self = this;
-
-    this.mode = G.Mode.READY;
 
     this.renderers = [];
     this.renderers.draw = function (obj) {
@@ -37,6 +36,8 @@ var Geometry = G = function () {
     };
 
     this.currentObject = null;
+    this.selectedObject = null;
+    this.snapped = null;
 
     this.cursorP = new G.Point();
 
@@ -63,40 +64,24 @@ var Geometry = G = function () {
         if (keyCode == KEYCODE_ESC) {
             self.resetMode();
         } else if (keyCode == KEYCODE_DEL) {
-            if (self.mode == G.Mode.SELECT) {
-                assertTrue(self.currentObject != null);
-                self.currentObject.destroy();
-                var inArray = $.inArray(self.currentObject, self.objects);
-                delete self.objects[ inArray];
-                self.currentObject = null;
-                self.mode = G.Mode.READY;
-            }
+            if (self.selectedObject)
+                self.selectedObject.destroy();
+            var inArray = $.inArray(self.selectedObject, self.objects);
+            delete self.objects[ inArray];
+            self.selectedObject = null;
         }
     });
 };
 
 G.prototype.resetMode = function () {
-    switch (this.mode) {
-        case G.Mode.IN_PROGRESS:
-            assertTrue(this.currentObject != null);
-            this.currentObject.destroy();
-            this.currentObject = null;
-            this.mode = G.Mode.READY;
-            break;
-        case G.Mode.SELECT:
-            assertTrue(this.currentObject != null);
-            this.currentObject.unselect();
-            this.mode = G.Mode.READY;
-            break;
+    if (this.currentObject) {
+        this.currentObject.destroy();
+        this.currentObject = null;
+    }
+    if (this.selectedObject) {
+        this.selectedObject.unselect();
     }
 };
-
-G.Mode = Object.freeze({
-    READY: "ready",
-    SELECT: "select",
-    HOVER: "hover",
-    IN_PROGRESS: "in progress"
-});
 
 G.prototype.onObjectCreated = function (callback) {
     this.objectCreatedCallbacks.push(callback);
@@ -155,7 +140,7 @@ G.prototype.addRenderer = function (renderer) {
     $(renderer.paper.canvas).mousemove(function (e) {
         renderer.updatePosition(cursorP, e, this);
 
-        var snapped = getSnapPoint(cursorP);
+        var snapped = self.snapped = getSnapPoint(cursorP);
         if (snapped) {
             snapWidget.p = snapped.snapPoint;
             snapWidget.shape = snapped.shape;
@@ -165,6 +150,7 @@ G.prototype.addRenderer = function (renderer) {
             cursorP.y = snapped.snapPoint.y;
             cursorP.z = snapped.snapPoint.z;
         } else {
+            self.snapped = null;
             snapWidget.hide(renderer.paper);
 
             if (self.ortho && self.currentObject) {
@@ -179,8 +165,7 @@ G.prototype.addRenderer = function (renderer) {
         }
         renderer.draw(snapWidget);
 
-        if (self.mode == G.Mode.IN_PROGRESS) {
-            assertTrue(self.currentObject != null);
+        if (self.currentObject) {
             self.currentObject.b.x = cursorP.x;
             self.currentObject.b.y = cursorP.y;
             renderers.draw(self.currentObject);
@@ -188,10 +173,26 @@ G.prototype.addRenderer = function (renderer) {
     });
 
     $(renderer.paper.canvas).click(function (e) {
-        if (self.mode == G.Mode.READY) {
-            self.mode = G.Mode.IN_PROGRESS;
+        if (!self.currentObject) {
             pointA = new G.Point(cursorP);
             pointA.t = G.Point.assignId();
+
+            var activeAction = $("#edit input[name=tool]:checked");
+            switch (activeAction.val()) {
+                case "move":
+                    if (!self.selectedObject) {
+                        break;
+                    }
+                    var moveAction = new G.MoveAction(self.selectedObject, pointA, new G.Point(cursorP));
+                    renderers.draw(moveAction);
+                    self.currentObject = moveAction;
+                    log("OK");
+                    return;
+            }
+
+            if (self.selectedObject) {
+                self.selectedObject.unselect();
+            }
 
             var activeControl = $("#controls input[name=tool]:checked");
             switch (activeControl.val()) {
@@ -217,17 +218,13 @@ G.prototype.addRenderer = function (renderer) {
                     self.objectCreatedCallbacks.notify(point);
                     break;
             }
-        } else if (self.mode == G.Mode.IN_PROGRESS) {
-            self.mode = G.Mode.READY;
+        } else {
             snapWidget.hide(renderer.paper);
 
-            assertTrue(self.currentObject != null);
             self.currentObject.b.x = cursorP.x;
             self.currentObject.b.y = cursorP.y;
             self.currentObject.b.t = G.Point.assignId();
-            renderers.draw(self.currentObject);
-            renderers.attachHandlers(self.currentObject);
-            self.objects.push(self.currentObject);
+            self.addObject(self.currentObject);
             self.objectCreatedCallbacks.notify(self.currentObject);
 
             self.currentObject = null;
@@ -237,6 +234,44 @@ G.prototype.addRenderer = function (renderer) {
     $.each(this.objects, function (k, obj) {
         renderer.draw(obj);
     });
+};
+
+G.MoveAction = function (obj, a, b) {
+    this.obj = obj;
+    this.a = a;
+    this.b = b;
+
+    var originalPosition = [];
+    var adjustedPosition = [];
+
+    if (obj instanceof G.Point) {
+        originalPosition = [new G.Point(obj)];
+        adjustedPosition = [obj];
+    } else if (obj instanceof G.Segment2D) {
+        originalPosition = [new G.Point(obj.a), new G.Point(obj.b)];
+        adjustedPosition = [obj.a, obj.b];
+    } else if (obj instanceof G.AuxiliaryLine) {
+        originalPosition = [new G.Point(obj.a), new G.Point(obj.b)];
+        adjustedPosition = [obj.a, obj.b];
+    } else if (obj instanceof G.Circle) {
+        originalPosition = [new G.Point(obj.o), new G.Point(obj.b)];
+        adjustedPosition = [obj.o, obj.b];
+    } else if (obj instanceof G.Line) {
+    }
+
+    var dx = [];
+    var dy = [];
+    $.each(originalPosition, function (k, v) {
+        dx[k] = v.x - a.x;
+        dy[k] = v.y - a.y;
+    });
+
+    this.adjust = function () {
+        $.each(adjustedPosition, function (k, v) {
+            v.x = dx[k] + b.x;
+            v.y = dy[k] + b.y;
+        });
+    };
 };
 
 G.SnapAlgos = {
@@ -1426,6 +1461,38 @@ G.PlanarRenderer.prototype.drawAxis = function (axis) {
         _super.call(this);
     };
 };
+/**
+ *
+ * @param mv {G.MoveAction}
+ */
+G.PlanarRenderer.prototype.drawMoveAction = function (mv) {
+    var CACHE = this.cache;
+    var paper = this.paper;
+
+    if (!mv[CACHE]) {
+        mv[CACHE] = {};
+
+        mv[CACHE]._obj = paper.path([
+            ["M" , mv.a.x, mv.a.y ],
+            [ "L" , mv.b.x, mv.b.y]
+        ]).attr(TRACK_ATTR).toBack();
+
+        var _super = mv.destroy || function () {
+        };
+        mv.destroy = function () {
+            mv[CACHE]._obj.remove();
+            delete mv[CACHE];
+            _super.call(this);
+        };
+    } else {
+        mv[CACHE]._obj.attr({path: [
+            ["M" , mv.a.x, mv.a.y ],
+            [ "L" , mv.b.x, mv.b.y]
+        ]});
+        mv.adjust();
+        this.draw(mv.obj);
+    }
+};
 G.PlanarRenderer.prototype.draw = function (obj) {
     if (obj instanceof G.Point) {
         this.drawPoint(obj);
@@ -1443,6 +1510,8 @@ G.PlanarRenderer.prototype.draw = function (obj) {
         this.drawLine(obj);
     } else if (obj instanceof G.SnapWidget) {
         obj.draw(this.paper)
+    } else if (obj instanceof G.MoveAction) {
+        this.drawMoveAction(obj);
     }
 };
 /**
@@ -1458,37 +1527,33 @@ G.PlanarRenderer.prototype.attachHandlers = function (g, obj) {
     var c = obj[CACHE];
     c._attr = c._obj.attr();
 
+    c._select = [];
+    c._unselect = [];
+
     var glow = c._obj.glow().attr({stroke: "transparent"});
 
     var h_in = function () {
-        if (g.mode == G.Mode.READY || g.mode == G.Mode.SELECT) {
+        if (!g.currentObject && !g.snapped) {
             document.body.style.cursor = "pointer";
             if (!c._selected)
                 c._obj.attr({stroke: "orange"});
         }
-        if (g.mode == G.Mode.READY) {
-            g.mode = G.Mode.HOVER;
-        }
     };
     var h_out = function () {
-        if (g.mode == G.Mode.HOVER || g.mode == G.Mode.SELECT) {
+        if (!g.currentObject && !g.snapped) {
             document.body.style.cursor = "auto";
             if (!c._selected)
                 c._obj.attr(c._attr);
         }
-        if (g.mode == G.Mode.HOVER) {
-            g.mode = G.Mode.READY;
-        }
     };
-    var click = function () {
-        if (g.mode == G.Mode.HOVER || g.mode == G.Mode.SELECT) {
-            g.mode = G.Mode.SELECT;
-            if (g.currentObject) {
-                g.currentObject.unselect();
+    var click = function (e) {
+        if (!g.currentObject && !g.snapped) {
+            if (g.selectedObject) {
+                g.selectedObject.unselect();
             }
-            c._selected = true;
-            g.currentObject = obj;
-            c._obj.attr({stroke: "red"});
+            g.selectedObject = obj;
+            obj.select();
+            e.cancelBubble = true;
         }
     };
     glow.hover(h_in, h_out);
@@ -1496,16 +1561,39 @@ G.PlanarRenderer.prototype.attachHandlers = function (g, obj) {
     glow.click(click);
     c._obj.click(click);
 
+    obj.select = function (callback) {
+        if (callback) {
+            c._select.push(callback);
+        } else {
+            $.each(c._select, function (k, v) {
+                v.call(obj);
+            });
+        }
+    };
+    obj.unselect = function (callback) {
+        if (callback) {
+            c._unselect.push(callback);
+        } else {
+            $.each(c._unselect, function (k, v) {
+                v.call(obj);
+            });
+        }
+    };
+
+    obj.select(function () {
+        c._selected = true;
+        c._obj.attr({stroke: "red"});
+    });
+    obj.unselect(function () {
+        c._obj.attr(c._attr);
+        c._selected = false;
+    });
+
     var _super = obj.destroy;
     obj.destroy = function () {
         glow.remove();
         delete c._attr;
         _super.call(this);
-    };
-
-    obj.unselect = function () {
-        g.currentObject[CACHE]._obj.attr(g.currentObject[CACHE]._attr);
-        g.currentObject[CACHE]._selected = false;
     };
 };
 
